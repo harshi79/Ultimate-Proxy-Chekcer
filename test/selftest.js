@@ -48,7 +48,7 @@ async function main() {
     gateway: { port: 0, mode: 'round-robin', retries: 3 },
   });
 
-  const { store, checker, gateway, judges } = createApp({ quiet: true });
+  const { store, checker, gateway, targets, judges } = createApp({ quiet: true });
   await waitFor(() => judges.selfTested, 15000);
   check('judge self-test (direct)', judges.realIp !== undefined && judges.echoAvailable === true, `realIp=${judges.realIp || '(null, offline)'} echo=${judges.echoAvailable}`);
 
@@ -105,6 +105,17 @@ async function main() {
   // ── export shape ──
   const alive = [...store.all()].filter(r => r.status === 'alive').length;
   check('stats consistent', store.stats().alive === alive && store.stats().total === lab.proxies.length, `${alive} alive of ${store.size()}`);
+
+  // ── custom targets: run the pool against a user URL ──
+  config.update({ targets: [{ id: 't1', url: lab.judgeUrl, keyword: 'origin' }] });
+  const trRun = await targets.run('t1', 'all');
+  check('target run accepted all proxies', trRun.queued === lab.proxies.length, `${trRun.queued} queued`);
+  const eliteTr = byKey.elite.tr && byKey.elite.tr.t1;
+  check('elite proxy passed target (200 + keyword)', eliteTr && eliteTr.ok === 1 && eliteTr.code === 200, eliteTr ? `${eliteTr.code} ${eliteTr.ms}ms "${eliteTr.info}"` : 'no result');
+  const deadTr = byKey.dead.tr && byKey.dead.tr.t1;
+  check('dead proxy failed target with error', deadTr && deadTr.ok === 0 && !!deadTr.info, deadTr ? deadTr.info.slice(0, 40) : 'no result');
+  const socksTr = byKey.socks5.tr && byKey.socks5.tr.t1;
+  check('socks5 proxy passed target via tunnel', socksTr && socksTr.ok === 1, socksTr ? `${socksTr.code} ${socksTr.ms}ms` : 'no result');
 
   gateway.stop();
   const failed = results.filter(r => !r.ok).length;

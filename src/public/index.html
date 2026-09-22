@@ -3,9 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ultimate Proxy Checker</title>
+<title>YORI — Proxy Checker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='black'/><text x='4' y='18' font-size='14' font-family='monospace' font-weight='bold' fill='%23d9ff3d'>Y</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>⚡</text></svg>">
 </head>
 <body>
 <div class="wrap">
@@ -13,31 +16,37 @@
   <!-- ═══ topbar ═══ -->
   <header class="topbar">
     <div class="brand">
-      <div class="logo">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4.09 12.69a.5.5 0 0 0 .38.82H11l-1.5 8.18a.3.3 0 0 0 .54.24L19.9 11.3a.5.5 0 0 0-.38-.83H13l1.54-8.2a.3.3 0 0 0-.54-.27z" fill="#22d3ee"/></svg>
-      </div>
-      <div>
-        <h1>ULTIMATE <span>PROXY CHECKER</span></h1>
-        <div class="sub">deep inspection · rotating gateway</div>
+      <div class="logo">Y</div>
+      <div class="brand-txt">
+        <h1>YORI<em>PROXY CHECKER</em></h1>
+        <div class="sub">// DEEP INSPECTION × ROTATING GATEWAY × TARGET TESTING</div>
       </div>
     </div>
     <div class="spacer"></div>
-    <div class="rate-chip" id="rateChip" title="checks completed in the last 60s"><b>0</b> checks/min</div>
-    <div class="engine-pill" id="enginePill"><span class="dot"></span><span id="engineLbl">idle</span></div>
-    <button class="btn go" id="btnEngine">▶ Start check</button>
-    <button class="btn primary" id="btnImport">⤓ Import</button>
-    <button class="btn ghost" id="btnSettings" title="Settings">⚙</button>
+    <div class="stamp dim-stamp" id="rateChip" title="checks completed in the last 60s"><b>0</b>/MIN</div>
+    <div class="stamp" id="enginePill"><span class="dot"></span><span id="engineLbl">IDLE</span></div>
+    <button class="btn go" id="btnEngine">▶ RUN CHECK</button>
+    <button class="btn" id="btnImport">⤓ IMPORT</button>
+    <button class="btn ghost sq" id="btnSettings" title="Settings">⚙</button>
   </header>
+
+  <!-- ═══ ticker ═══ -->
+  <div class="ticker">
+    <div class="ticker-inner">
+      <span id="tickA">YORI</span>
+      <span id="tickB">YORI</span>
+    </div>
+  </div>
 
   <!-- ═══ KPIs ═══ -->
   <section class="kpis">
-    <div class="panel kpi" id="kpiTotal"><div class="lbl">Pool</div><div class="val" id="vTotal">0</div><div class="trend" id="tTotal">—</div></div>
-    <div class="panel kpi alive" id="kpiAlive"><div class="lbl">Alive</div><div class="val" id="vAlive">0</div><div class="trend" id="tAlive">—</div></div>
-    <div class="panel kpi dead" id="kpiDead"><div class="lbl">Dead</div><div class="val" id="vDead">0</div><div class="trend" id="tDead">—</div></div>
-    <div class="panel kpi checking" id="kpiChecking"><div class="lbl">In flight</div><div class="val" id="vChecking">0</div><div class="trend" id="tChecking">queued 0</div></div>
-    <div class="panel kpi lat" id="kpiLat"><div class="lbl">Avg latency</div><div class="val" id="vLat">—</div><div class="trend" id="tLat">alive proxies</div></div>
-    <div class="panel kpi elite" id="kpiElite"><div class="lbl">Elite</div><div class="val" id="vElite">0</div><div class="trend" id="tElite">anonymity</div></div>
-    <div class="panel kpi" id="kpiGeo"><div class="lbl">Geo resolved</div><div class="val" id="vGeo">0</div><div class="spark-wrap"><canvas class="spark" id="spark"></canvas></div></div>
+    <div class="panel kpi" id="kpiTotal"><div class="lbl">[POOL]</div><div class="val" id="vTotal">0</div><div class="trend" id="tTotal">—</div></div>
+    <div class="panel kpi alive" id="kpiAlive"><div class="lbl">[ALIVE]</div><div class="val" id="vAlive">0</div><div class="trend" id="tAlive">—</div></div>
+    <div class="panel kpi dead" id="kpiDead"><div class="lbl">[DEAD]</div><div class="val" id="vDead">0</div><div class="trend" id="tDead">—</div></div>
+    <div class="panel kpi checking" id="kpiChecking"><div class="lbl">[IN FLIGHT]</div><div class="val" id="vChecking">0</div><div class="trend" id="tChecking">queued 0</div></div>
+    <div class="panel kpi lat" id="kpiLat"><div class="lbl">[AVG LAT]</div><div class="val" id="vLat">—</div><div class="trend" id="tLat">alive proxies</div></div>
+    <div class="panel kpi elite" id="kpiElite"><div class="lbl">[ELITE]</div><div class="val" id="vElite">0</div><div class="trend" id="tElite">anonymity</div></div>
+    <div class="panel kpi" id="kpiGeo"><div class="lbl">[GEO]</div><div class="val" id="vGeo">0</div><div class="spark-wrap"><canvas class="spark" id="spark"></canvas></div></div>
   </section>
 
   <!-- ═══ main grid ═══ -->
@@ -48,91 +57,106 @@
       <div class="toolbar">
         <div class="search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <input id="q" placeholder="Search ip, port, country, ISP…  ( / )" spellcheck="false">
+          <input id="q" placeholder="SEARCH ip, port, country, isp…  [ / ]" spellcheck="false">
         </div>
         <select class="sel" id="fStatus">
-          <option value="all">Status: all</option>
-          <option value="alive">Alive</option>
-          <option value="dead">Dead</option>
-          <option value="checking">Checking</option>
-          <option value="unchecked">Unchecked</option>
+          <option value="all">STATUS: ALL</option>
+          <option value="alive">ALIVE</option>
+          <option value="dead">DEAD</option>
+          <option value="checking">CHECKING</option>
+          <option value="unchecked">QUEUED</option>
         </select>
         <select class="sel" id="fProto">
-          <option value="all">Protocol: all</option>
+          <option value="all">PROTO: ALL</option>
           <option value="http">HTTP</option>
-          <option value="https">HTTPS (CONNECT)</option>
+          <option value="https">HTTPS</option>
           <option value="socks5">SOCKS5</option>
           <option value="socks4">SOCKS4</option>
         </select>
         <select class="sel" id="fAnon">
-          <option value="all">Anonymity: all</option>
-          <option value="elite">Elite</option>
-          <option value="anonymous">Anonymous</option>
-          <option value="transparent">Transparent</option>
-          <option value="unknown">Unknown</option>
+          <option value="all">ANON: ALL</option>
+          <option value="elite">ELITE</option>
+          <option value="anonymous">ANONYMOUS</option>
+          <option value="transparent">TRANSPARENT</option>
+          <option value="unknown">UNKNOWN</option>
         </select>
-        <select class="sel" id="fCountry"><option value="all">Country: all</option></select>
+        <select class="sel" id="fCountry"><option value="all">COUNTRY: ALL</option></select>
         <div class="export-menu">
-          <button class="btn sm" id="btnExport">⤴ Export ▾</button>
+          <button class="btn sm" id="btnExport">⤴ EXPORT ▾</button>
           <div class="menu" id="exportMenu">
-            <button data-fmt="txt-alive">TXT · alive only (proto://ip:port)</button>
-            <button data-fmt="txt">TXT · current filter (ip:port)</button>
-            <button data-fmt="json">JSON · current filter (full data)</button>
-            <button data-fmt="csv">CSV · current filter (spreadsheet)</button>
+            <button data-fmt="txt-alive">TXT · ALIVE ONLY (proto://ip:port)</button>
+            <button data-fmt="txt">TXT · CURRENT FILTER</button>
+            <button data-fmt="json">JSON · CURRENT FILTER (FULL)</button>
+            <button data-fmt="csv">CSV · CURRENT FILTER</button>
           </div>
         </div>
-        <button class="btn sm ghost" id="btnRecheckDead" title="Re-run the checker on all dead proxies">↻ Dead</button>
-        <button class="btn sm ghost" id="btnClearDead" title="Remove all dead proxies from the pool">✕ Dead</button>
+        <button class="btn sm ghost" id="btnRecheckDead" title="Re-run the checker on all dead proxies">↻ DEAD</button>
+        <button class="btn sm ghost" id="btnClearDead" title="Remove all dead proxies from the pool">✕ DEAD</button>
       </div>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th data-sort="st">Status</th>
-              <th data-sort="id">Address</th>
-              <th data-sort="pr">Protocols</th>
-              <th data-sort="an">Anonymity</th>
-              <th data-sort="la">Latency</th>
-              <th data-sort="sp">Speed</th>
-              <th data-sort="geo">Location</th>
+              <th data-sort="st">STATUS</th>
+              <th data-sort="id">ADDRESS</th>
+              <th data-sort="pr">PROTO</th>
+              <th data-sort="an">ANON</th>
+              <th data-sort="la">LATENCY</th>
+              <th data-sort="sp">SPEED</th>
+              <th data-sort="geo">LOCATION</th>
               <th>ISP</th>
-              <th data-sort="lc">Checked</th>
+              <th>TARGETS</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="empty-state" id="emptyState" style="display:none">
-          <div class="big">⚡</div>
-          <h3>No proxies in the pool</h3>
-          <div>Paste a list, drop a file, or pull from public sources.</div>
+          <div class="big">▚▞</div>
+          <h3>EMPTY POOL</h3>
+          <div>PASTE A LIST, DROP A FILE, OR PULL FROM PUBLIC SOURCES.</div>
           <div class="row">
-            <button class="btn primary" onclick="openImport()">⤓ Import proxies</button>
+            <button class="btn acid" onclick="openImport()">⤓ IMPORT PROXIES</button>
           </div>
         </div>
       </div>
       <div class="table-foot">
-        <span id="footInfo">0 proxies</span>
-        <span class="spacer" style="flex:1"></span>
-        <span id="footSel"></span>
+        <span id="footInfo">0 PROXIES</span>
+        <span style="flex:1"></span>
+        <span class="dim">CLICK A ROW FOR THE FULL INSPECTION REPORT</span>
       </div>
     </section>
 
     <!-- side column -->
     <aside class="side">
 
+      <!-- ═══ custom targets ═══ -->
+      <section class="panel">
+        <div class="panel-h">
+          <span class="acid-marker">▣</span> CUSTOM TARGETS
+          <span style="flex:1"></span>
+          <span class="dim mono small" id="tgtRunInfo"></span>
+        </div>
+        <div class="tgt-add">
+          <input id="tgtUrl" placeholder="https://your-site.tld/path — any URL" spellcheck="false">
+          <input id="tgtKw" placeholder="must contain (optional)" spellcheck="false">
+          <button class="btn acid sm" id="tgtAdd">+ ADD</button>
+        </div>
+        <div class="tgt-list" id="tgtList"></div>
+        <div class="tgt-hint">EVERY ALIVE PROXY GETS FIRED AT YOUR URL — STATUS, LATENCY, TITLE + KEYWORD MATCH. THINK A PROXY WORKS? PROVE IT AGAINST THE SITE YOU ACTUALLY USE.</div>
+      </section>
+
       <!-- map -->
       <section class="panel">
         <div class="panel-h">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.7 2.6 4 5.7 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.7-4-9s1.3-6.4 4-9z"/></svg>
-          Live geo map
-          <span class="spacer"></span>
-          <span class="dim mono" id="mapCount" style="font-size:11px"></span>
+          <span class="acid-marker">◉</span> LIVE GEO MAP
+          <span style="flex:1"></span>
+          <span class="dim mono small" id="mapCount"></span>
         </div>
         <div class="map-box">
           <canvas id="map" width="760" height="380"></canvas>
           <div class="map-tip" id="mapTip"></div>
-          <div class="map-empty" id="mapEmpty">Locations appear as alive proxies resolve their exit IP geo</div>
+          <div class="map-empty" id="mapEmpty">LOCATIONS APPEAR AS ALIVE PROXIES RESOLVE THEIR EXIT GEO</div>
         </div>
         <div class="countries" id="countryList"></div>
       </section>
@@ -140,33 +164,32 @@
       <!-- gateway -->
       <section class="panel">
         <div class="panel-h">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 7l3-3M4 7l3 3M20 17H4m16 0-3-3m3 3-3 3"/></svg>
-          Rotating gateway
-          <span class="spacer"></span>
+          <span class="acid-marker">⇄</span> ROTATING GATEWAY
+          <span style="flex:1"></span>
           <label class="switch" title="Start/stop the local rotating proxy">
             <input type="checkbox" id="gwToggle"><span class="track"></span><span class="knob"></span>
           </label>
         </div>
         <div class="gw-grid">
-          <div class="gw-stat"><div class="l">Served</div><div class="v" id="gwServed" style="color:var(--green)">0</div></div>
-          <div class="gw-stat"><div class="l">Rotated away</div><div class="v" id="gwFailed" style="color:var(--red)">0</div></div>
-          <div class="gw-stat"><div class="l">Live tunnels</div><div class="v" id="gwTunnels" style="color:var(--cyan)">0</div></div>
-          <div class="gw-stat"><div class="l">Transferred</div><div class="v" id="gwBytes" style="color:var(--violet)">0 B</div></div>
+          <div class="gw-stat"><div class="l">SERVED</div><div class="v" id="gwServed" style="color:var(--acid2)">0</div></div>
+          <div class="gw-stat"><div class="l">ROTATED AWAY</div><div class="v" id="gwFailed" style="color:var(--red)">0</div></div>
+          <div class="gw-stat"><div class="l">LIVE TUNNELS</div><div class="v" id="gwTunnels" style="color:var(--cyan)">0</div></div>
+          <div class="gw-stat"><div class="l">TRANSFERRED</div><div class="v" id="gwBytes" style="color:var(--violet)">0 B</div></div>
         </div>
         <div class="gw-body">
           <div class="copyline">
-            <span>endpoint</span><code id="gwEndpoint">http://localhost:8899</code>
+            <span>ENDPOINT</span><code id="gwEndpoint">http://localhost:8899</code>
             <button class="icon-btn" id="gwCopy" title="Copy">⧉</button>
             <select class="sel" id="gwMode" style="margin-left:auto" title="Rotation mode">
-              <option value="round-robin">round-robin</option>
-              <option value="random">random</option>
-              <option value="sticky">sticky sessions</option>
-              <option value="best">lowest latency</option>
+              <option value="round-robin">ROUND-ROBIN</option>
+              <option value="random">RANDOM</option>
+              <option value="sticky">STICKY</option>
+              <option value="best">LOWEST LAT</option>
             </select>
           </div>
           <div class="gw-row">
             <input class="gw-url" id="gwTestUrl" placeholder="URL to fetch through the rotation…" spellcheck="false">
-            <button class="btn sm go" id="gwTest">Fetch via rotation</button>
+            <button class="btn sm go" id="gwTest">FETCH VIA ROTATION</button>
           </div>
           <div class="gw-result" id="gwResult"></div>
           <div class="exits gw-row" id="gwExits"></div>
@@ -176,52 +199,58 @@
       <!-- console -->
       <section class="panel">
         <div class="panel-h">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 8 4 4-4 4m7 2h7"/></svg>
-          Engine console
-          <span class="spacer"></span>
-          <span class="dim" style="font-size:10.5px">live</span>
+          <span class="acid-marker">&gt;_</span> ENGINE CONSOLE
+          <span style="flex:1"></span>
+          <span class="dim small">LIVE</span>
         </div>
         <div class="console" id="console"></div>
       </section>
 
     </aside>
   </main>
+
+  <footer class="foot">
+    <span>YORI PROXY CHECKER</span>
+    <span class="dim">// RAW SOCKETS. NO FAKE CHECKS. YOUR TARGETS, YOUR RULES.</span>
+    <span style="flex:1"></span>
+    <span class="dim mono small" id="footVer">v1.1</span>
+  </footer>
 </div>
 
 <!-- ═══ import modal ═══ -->
 <div class="overlay" id="importOverlay">
   <div class="modal">
-    <div class="modal-h">Import proxies <button class="x" data-close>✕</button></div>
+    <div class="modal-h"><span>IMPORT PROXIES</span><button class="x" data-close>✕</button></div>
     <div class="modal-b">
       <div class="tabs">
-        <button class="tab active" data-tab="paste">Paste list</button>
-        <button class="tab" data-tab="file">Upload file</button>
-        <button class="tab" data-tab="sources">Public sources</button>
+        <button class="tab active" data-tab="paste">PASTE LIST</button>
+        <button class="tab" data-tab="file">UPLOAD FILE</button>
+        <button class="tab" data-tab="sources">PUBLIC SOURCES</button>
       </div>
       <div class="tabbody" data-body="paste">
-        <textarea class="ta" id="pasteTa" placeholder="1.2.3.4:8080&#10;socks5://5.6.7.8:1080&#10;http://user:pass@9.9.9.9:3128&#10;1.1.1.1:8080:user:pass" spellcheck="false"></textarea>
+        <textarea class="ta" id="pasteTa" placeholder="1.2.3.4:8080&#10;socks5://5.6.7.8:1080&#10;http://user:pass@9.9.9.9:3128&#10;1.1.1.1:8080:user:pass&#10;1.1.1.2 8080 socks5&#10;{&quot;ip&quot;:&quot;6.6.6.6&quot;,&quot;port&quot;:9090,&quot;protocol&quot;:&quot;socks5&quot;}" spellcheck="false"></textarea>
         <div class="hint">
-          Supported: <code>ip:port</code> · <code>proto://ip:port</code> · <code>ip:port:user:pass</code> · <code>ip:port:proto</code> · one per line, comments with <code>#</code>
+          ANY FORMAT: <code>ip:port</code> · <code>proto://ip:port</code> · <code>user:pass@ip:port</code> · <code>ip:port:user:pass</code> · <code>ip port proto</code> · <code>CSV</code> · <code>JSON lines</code> — one per line, <code>#</code> comments
         </div>
       </div>
       <div class="tabbody" data-body="file" style="display:none">
         <div class="file-drop" id="fileDrop">
-          <div style="font-size:26px;margin-bottom:8px">⤓</div>
-          <b>Drop a .txt / .csv list</b><br>or click to browse — parsed with the same rules as paste
-          <input type="file" id="fileInput" accept=".txt,.csv,.list,text/plain" style="display:none">
+          <div style="font-size:28px;margin-bottom:8px">⤓</div>
+          <b>DROP A .TXT / .CSV LIST</b><br>OR CLICK TO BROWSE — SAME RULES AS PASTE
+          <input type="file" id="fileInput" accept=".txt,.csv,.list,.json,text/plain" style="display:none">
         </div>
       </div>
       <div class="tabbody" data-body="sources" style="display:none">
         <div class="src-list" id="srcList"></div>
-        <div class="hint">Public free-proxy lists. The checker validates everything — importing garbage is fine.</div>
+        <div class="hint">PUBLIC FREE-PROXY LISTS. THE CHECKER VALIDATES EVERYTHING — IMPORTING GARBAGE IS FINE.</div>
       </div>
     </div>
     <div class="modal-f">
-      <span class="cnt" id="importCnt"></span>
+      <span class="cnt mono" id="importCnt"></span>
       <span style="flex:1"></span>
-      <button class="btn" data-close>Cancel</button>
-      <button class="btn primary" id="btnDoImport">Import to pool</button>
-      <button class="btn go" id="btnSrcFetch" style="display:none">Fetch selected sources</button>
+      <button class="btn" data-close>CANCEL</button>
+      <button class="btn acid" id="btnDoImport">IMPORT TO POOL</button>
+      <button class="btn go" id="btnSrcFetch" style="display:none">FETCH SELECTED</button>
     </div>
   </div>
 </div>
@@ -229,55 +258,64 @@
 <!-- ═══ settings drawer ═══ -->
 <div class="overlay drawer" id="settingsOverlay">
   <div class="modal">
-    <div class="modal-h">Settings <button class="x" data-close>✕</button></div>
+    <div class="modal-h"><span>SETTINGS</span><button class="x" data-close>✕</button></div>
     <div class="modal-b">
-      <div class="set-section">Checker engine</div>
+      <div class="set-section">// CHECKER ENGINE</div>
       <div class="set-grid">
-        <div class="set-row"><label>Concurrency</label><input type="number" id="sConc" min="1" max="1000"></div>
-        <div class="set-row"><label>Timeout / check (ms)</label><input type="number" id="sTimeout" min="1000" max="60000" step="500"></div>
-        <div class="set-row"><label>Recheck alive (min, 0=off)</label><input type="number" id="sRecheckAlive" min="0" max="720"></div>
-        <div class="set-row"><label>Recheck dead (min, 0=off)</label><input type="number" id="sRecheckDead" min="0" max="720"></div>
+        <div class="set-row"><label>CONCURRENCY</label><input type="number" id="sConc" min="1" max="1000"></div>
+        <div class="set-row"><label>TIMEOUT / CHECK (MS)</label><input type="number" id="sTimeout" min="1000" max="60000" step="500"></div>
+        <div class="set-row"><label>RECHECK ALIVE (MIN, 0=OFF)</label><input type="number" id="sRecheckAlive" min="0" max="720"></div>
+        <div class="set-row"><label>RECHECK DEAD (MIN, 0=OFF)</label><input type="number" id="sRecheckDead" min="0" max="720"></div>
       </div>
-      <div class="set-section">Protocol sniffing</div>
+      <div class="set-section">// PROTOCOL SNIFFING</div>
       <div class="toggles" id="sniffToggles">
         <label class="tg"><input type="checkbox" data-sniff="socks5"> SOCKS5</label>
         <label class="tg"><input type="checkbox" data-sniff="socks4"> SOCKS4</label>
         <label class="tg"><input type="checkbox" data-sniff="http"> HTTP</label>
         <label class="tg"><input type="checkbox" data-sniff="https"> HTTPS (CONNECT)</label>
       </div>
-      <div class="set-row wide" style="margin-top:8px"><label>HTTPS probe target (CONNECT verification)</label><input id="sHttpsProbe" spellcheck="false"></div>
-      <div class="set-section">Speed probe</div>
+      <div class="set-row wide" style="margin-top:8px"><label>HTTPS PROBE TARGET</label><input id="sHttpsProbe" spellcheck="false"></div>
+      <div class="set-section">// SPEED PROBE</div>
       <div class="set-grid">
-        <div class="set-row"><label>Enabled</label><label class="tg"><input type="checkbox" id="sSpeedOn"> measure download speed</label></div>
-        <div class="set-row"><label>Max bytes</label><input type="number" id="sSpeedBytes" min="16384" max="4194304" step="16384"></div>
-        <div class="set-row wide"><label>Speed URL</label><input id="sSpeedUrl" spellcheck="false"></div>
+        <div class="set-row"><label>ENABLED</label><label class="tg"><input type="checkbox" id="sSpeedOn"> measure download speed</label></div>
+        <div class="set-row"><label>MAX BYTES</label><input type="number" id="sSpeedBytes" min="16384" max="4194304" step="16384"></div>
+        <div class="set-row wide"><label>SPEED URL</label><input id="sSpeedUrl" spellcheck="false"></div>
       </div>
-      <div class="set-section">Judges (echo endpoints, one per line)</div>
+      <div class="set-section">// JUDGES (ECHO ENDPOINTS, ONE PER LINE)</div>
       <div class="set-row wide"><textarea class="ta" id="sJudges" style="min-height:70px" spellcheck="false"></textarea></div>
-      <div class="set-section">Gateway</div>
+      <div class="set-section">// GATEWAY</div>
       <div class="set-grid">
-        <div class="set-row"><label>Port</label><input type="number" id="sGwPort" min="1" max="65535"></div>
-        <div class="set-row"><label>Default mode</label>
+        <div class="set-row"><label>PORT</label><input type="number" id="sGwPort" min="1" max="65535"></div>
+        <div class="set-row"><label>DEFAULT MODE</label>
           <select id="sGwMode">
-            <option value="round-robin">round-robin</option>
-            <option value="random">random</option>
-            <option value="sticky">sticky sessions</option>
-            <option value="best">lowest latency</option>
+            <option value="round-robin">ROUND-ROBIN</option>
+            <option value="random">RANDOM</option>
+            <option value="sticky">STICKY</option>
+            <option value="best">LOWEST LAT</option>
           </select>
         </div>
       </div>
       <div class="danger-zone">
-        <span class="t">Danger zone</span>
-        <button class="btn sm danger" id="btnResetResults">Reset results</button>
-        <button class="btn sm danger" id="btnWipe">Wipe pool</button>
+        <span class="t">!DANGER</span>
+        <button class="btn sm danger" id="btnResetResults">RESET RESULTS</button>
+        <button class="btn sm danger" id="btnWipe">WIPE POOL</button>
       </div>
     </div>
     <div class="modal-f">
-      <span class="cnt" id="setSaved"></span>
+      <span class="cnt mono" id="setSaved"></span>
       <span style="flex:1"></span>
-      <button class="btn" data-close>Close</button>
-      <button class="btn primary" id="btnSaveSettings">Save settings</button>
+      <button class="btn" data-close>CLOSE</button>
+      <button class="btn acid" id="btnSaveSettings">SAVE SETTINGS</button>
     </div>
+  </div>
+</div>
+
+<!-- ═══ inspector modal ═══ -->
+<div class="overlay" id="inspectorOverlay">
+  <div class="modal insp">
+    <div class="modal-h"><span id="inspTitle">—</span><span class="stamp sm" id="inspStamp" style="margin-left:12px"></span><button class="x" data-close style="margin-left:auto">✕</button></div>
+    <div class="modal-b" id="inspBody"></div>
+    <div class="modal-f" id="inspFoot"></div>
   </div>
 </div>
 

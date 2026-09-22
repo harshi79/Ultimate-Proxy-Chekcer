@@ -19,6 +19,7 @@ const DEFAULTS = {
   recheckDeadMin: 0,
   judgeUrls: null,               // null = built-in defaults
   judgeTimeoutMs: 8000,
+  targets: [],                   // user-defined target URLs: [{id, url, keyword}]
   gateway: {
     port: 8899,
     mode: 'round-robin',         // round-robin | random | sticky | best

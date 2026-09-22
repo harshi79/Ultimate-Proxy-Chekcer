@@ -32,6 +32,7 @@ const FRESH = () => ({
   lastChecked: null, lastSeen: null, addedAt: Date.now(),
   lastError: null,
   gwUses: 0,
+  tr: {},                        // target results: { targetId: {ok, code, ms, bytes, info, ts} }
 });
 
 class Store extends EventEmitter {
@@ -48,13 +49,28 @@ class Store extends EventEmitter {
   /* ── parsing / import ── */
 
   static parseLine(line) {
-    let s = line.trim();
+    let s = String(line || '').trim();
     if (!s || s.startsWith('#') || s.startsWith('//')) return null;
-    s = s.replace(/^proxy:\/\//i, '');
+
+    // JSON object format: {"ip":"1.2.3.4","port":8080,"protocol":"socks5",...}
+    if (s.startsWith('{')) {
+      try {
+        const j = JSON.parse(s);
+        const ip = j.ip || j.host || j.addr || j.server;
+        const port = parseInt(j.port || j.portNumber, 10);
+        if (!ip || !Number.isFinite(port)) return null;
+        let proto = String(j.protocol || j.type || (Array.isArray(j.protocols) ? j.protocols[0] : '') || '').toLowerCase()
+          .replace('socks5h', 'socks5').replace('socks4a', 'socks4');
+        const auth = (j.username || j.user) ? { user: String(j.username || j.user), pass: String(j.password || j.pass || '') } : null;
+        return { ip: String(ip), port, auth, hint: /^(https?|socks[45])$/.test(proto) ? proto : null };
+      } catch { return null; }
+    }
+
+    s = s.replace(/^proxy:\/\//i, 'http://').replace(/^socks5h:\/\//i, 'socks5://').replace(/^socks4a:\/\//i, 'socks4://');
     let auth = null, hint = null;
-    const scheme = s.match(/^(https?|socks[45]a?):\/\//i);
+    const scheme = s.match(/^(https?|socks[45]):\/\//i);
     if (scheme) {
-      hint = scheme[1].toLowerCase().replace('socks4a', 'socks4').replace('socks5h', 'socks5');
+      hint = scheme[1].toLowerCase();
       s = s.slice(scheme[0].length);
     }
     const at = s.lastIndexOf('@');
@@ -63,18 +79,31 @@ class Store extends EventEmitter {
       if (creds.length === 2) auth = { user: creds[0], pass: creds[1] };
       s = s.slice(at + 1);
     }
-    s = s.split(/[\s,;|]+/)[0];
-    let parts = s.split(':').filter(Boolean);
+
+    const toks = s.split(/[\s,;|]+/).filter(Boolean);
+
+    // whitespace / comma / semicolon separated: "1.2.3.4 8080 [socks5 [user pass]]"
+    if (toks.length >= 2 && !toks[0].includes(':')) {
+      const [ip, port, proto, user, pass] = toks;
+      if (proto && /^(https?|socks[45])$/i.test(proto)) hint = proto.toLowerCase();
+      if (user && pass && !/^(https?|socks[45])$/i.test(proto)) { auth = { user, pass }; }
+      else if (user && pass) { auth = { user, pass }; }
+      const p = parseInt(port, 10);
+      if (!/^[a-z0-9.\-[\]:]+$/i.test(ip) || !Number.isFinite(p) || p < 1 || p > 65535) return null;
+      return { ip: ip.replace(/^\[|\]$/g, ''), port: p, auth, hint };
+    }
+
+    // colon format: ip:port[:proto] or ip:port:user:pass
+    let parts = (toks[0] || '').split(':').filter(Boolean);
     if (parts.length < 2) return null;
     let [ip, port] = parts;
     if (parts.length >= 3) {
-      // could be ip:port:user:pass or ip:port:proto
       if (/^(https?|socks[45])$/i.test(parts[2])) { hint = parts[2].toLowerCase(); }
-      else if (parts.length >= 4) { auth = { user: parts[2], pass: parts[3] }; }
+      else if (parts.length >= 4) { auth = { user: parts[2], pass: parts.slice(3).join(':') }; }
     }
     port = parseInt(port, 10);
     if (!ip || !Number.isFinite(port) || port < 1 || port > 65535) return null;
-    if (!/^(\d{1,3}(?:\.\d{1,3}){3}|[a-f0-9:]+$|\[?[a-f0-9:]+\]?)$/i.test(ip) && !/^[a-z0-9.-]+$/i.test(ip)) return null;
+    if (!/^[a-z0-9.\-[\]:]+$/i.test(ip)) return null;
     ip = ip.replace(/^\[|\]$/g, '');
     return { ip, port, auth, hint };
   }
@@ -128,6 +157,7 @@ class Store extends EventEmitter {
         status: 'unchecked', protocols: [], anonymity: 'unknown', markers: [],
         latencyMs: null, avgLatencyMs: null, speedKbps: null, exitIp: null,
         checks: 0, fails: 0, okChecks: 0, lastChecked: null, lastSeen: null, lastError: null,
+        tr: {},
       });
     }
     this._dirty = true; this.emit('cleared-results');

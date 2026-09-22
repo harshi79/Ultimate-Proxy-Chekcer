@@ -1,20 +1,21 @@
 'use strict';
-/* Ultimate Proxy Checker — dashboard client */
+/* YORI PROXY CHECKER — dashboard client */
 
 const $ = (s, el) => (el || document).querySelector(s);
 const $$ = (s, el) => [...(el || document).querySelectorAll(s)];
 
 const state = {
-  proxies: new Map(),      // id -> normalized record
+  proxies: new Map(),
   config: null,
   realIp: null,
   engine: false,
   gw: null,
+  targets: [],
+  trun: { running: null, progress: {} },
   stats: {},
   filters: { q: '', status: 'all', proto: 'all', anon: 'all', country: 'all' },
   sort: { key: 'la', dir: 1 },
   rateHistory: [],
-  geoOffline: false,
   judgeHint: null,
 };
 
@@ -26,12 +27,8 @@ const flagOf = (cc) => {
   return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1f1a5 + c.charCodeAt(0)));
 };
 const fmtLat = (ms) => ms == null ? '—' : ms >= 10000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
-const latColor = (ms) => ms == null ? '#64748b' : ms < 150 ? '#34d399' : ms < 500 ? '#fbbf24' : ms < 1500 ? '#fb923c' : '#f87171';
-const fmtSpeed = (kb) => {
-  if (kb == null) return '—';
-  if (kb >= 1024) return (kb / 1024).toFixed(1) + ' MB/s';
-  return kb + ' KB/s';
-};
+const latColor = (ms) => ms == null ? 'var(--paper-faint)' : ms < 150 ? 'var(--acid)' : ms < 500 ? 'var(--amber)' : ms < 1500 ? '#fb923c' : 'var(--red)';
+const fmtSpeed = (kb) => kb == null ? '—' : kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB/s' : kb + ' KB/s';
 const fmtBytes = (b) => {
   if (b == null || isNaN(b)) return '0 B';
   if (b > 1 << 30) return (b / (1 << 30)).toFixed(2) + ' GB';
@@ -47,7 +44,7 @@ const ago = (ts) => {
   if (s < 3600) return (s / 60 | 0) + 'm ago';
   return (s / 3600 | 0) + 'h ago';
 };
-setInterval(() => { if (state.proxies.size) scheduleRender(); }, 30000); // refresh "x ago"
+setInterval(() => { if (state.proxies.size) renderLive(); }, 30000);
 
 function toast(kind, msg) {
   const el = document.createElement('div');
@@ -57,14 +54,13 @@ function toast(kind, msg) {
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 320); }, 3400);
 }
 
-/* normalize server record (compact wire format) */
 function norm(r) {
   const geo = r.ge ? { country: r.ge[0], countryCode: r.ge[1], city: r.ge[2], isp: r.ge[3], lat: r.ge[4], lon: r.ge[5], local: !!r.ge[6], proxyHost: !!r.ge[7], hosting: !!r.ge[8] } : null;
   return {
     id: r.id, ip: r.ip, port: r.port,
     st: r.st, pr: r.pr || [], an: r.an || 'unknown',
     la: r.la, al: r.al, sp: r.sp,
-    ex: r.ex, geo,
+    ex: r.ex, geo, tr: r.tr || null,
     ck: r.ck, fk: r.fk, lc: r.lc, ls: r.ls, gu: r.gu || 0,
     er: r.er, mk: r.mk || [],
   };
@@ -89,9 +85,12 @@ async function resync() {
     state.engine = s.engine;
     state.gw = s.gateway;
     state.stats = s.stats;
+    state.targets = s.targets || [];
+    state.trun = s.targetRun || state.trun;
     state.judgeHint = (s.config.judgeUrls && s.config.judgeUrls[0]) || null;
-    state.geoOffline = s.geo.offline;
     state.proxies = new Map((s.proxies || []).map(r => [r.id, norm(r)]));
+    $('#console').innerHTML = '';
+    logCount = 0;
     (s.logs || []).forEach(addLog);
     renderAll();
   } catch (e) {
@@ -114,7 +113,7 @@ function connectWS() {
       }
       if (m.engine !== undefined) state.engine = m.engine;
       if (m.gw) state.gw = m.gw;
-      if (m.geo) state.geoOffline = m.geo.offline;
+      if (m.trun) state.trun = m.trun;
       if (m.updates) for (const u of m.updates) state.proxies.set(u.id, norm(u));
       if (m.logs) for (const l of m.logs) addLog(l);
       renderLive();
@@ -124,9 +123,15 @@ function connectWS() {
     } else if (m.t === 'gateway') {
       state.gw = m.gw;
       renderLive();
+    } else if (m.t === 'trun') {
+      state.trun = m.run;
+      renderLive();
+    } else if (m.t === 'targets') {
+      state.targets = m.targets;
+      renderTargets();
     } else if (m.t === 'imported') {
       state.stats = m.stats;
-      toast('ok', `Imported ${m.added} new (${m.updated} known)`);
+      toast('ok', `IMPORTED ${m.added} NEW · ${m.updated} KNOWN`);
       resync();
     } else if (m.t === 'reset') {
       resync();
@@ -137,33 +142,26 @@ function connectWS() {
 
 /* ───────────────────────── rendering ───────────────────────── */
 
-let renderQueued = false, lastRender = 0;
-function renderLive() {
-  const now = performance.now();
-  if (now - lastRender < 220) {
-    if (!renderQueued) {
-      renderQueued = true;
-      setTimeout(() => { renderQueued = false; renderLive(); }, 230 - (now - lastRender));
-    }
-    return;
-  }
-  lastRender = now;
-  renderKpis();
-  renderTable();
-  renderGw();
-  renderCountries();
-  updateEngineUI();
-}
-function scheduleRender() { renderLive(); }
-
 function renderAll() {
   renderKpis();
-  renderTable(true);
+  renderTable();
+  renderTargets();
   renderGw();
+  renderTicker();
   renderCountryFilter();
   renderCountries();
   updateEngineUI();
   fillSettings();
+}
+
+function renderLive() {
+  renderKpis();
+  renderTable();
+  renderTargets();
+  renderGw();
+  renderTicker();
+  renderCountries();
+  updateEngineUI();
 }
 
 function filtered() {
@@ -189,7 +187,6 @@ function filtered() {
       case 'la': return r.la ?? 1e9;
       case 'sp': return -(r.sp ?? 0);
       case 'geo': return (r.geo && r.geo.country) || 'zzz';
-      case 'lc': return r.lc ?? 0;
       default: return r.id;
     }
   };
@@ -200,49 +197,53 @@ function filtered() {
   return rows;
 }
 
-function renderTable(rebuild) {
+function tchipHtml(r, t) {
+  const tr = r.tr && r.tr[t.id];
+  if (state.trun.running === t.id && (!tr || tr.info === 'testing…')) return `<span class="tchip run" title="${esc(t.url)} — testing">▮▮</span>`;
+  if (!tr) return `<span class="tchip" title="${esc(t.url)} — not tested against this proxy">—</span>`;
+  if (tr.ok === 1) return `<span class="tchip ok" title="${esc(t.url)} — ${esc(tr.info || '')}">✓${tr.ms != null ? tr.ms : ''}</span>`;
+  return `<span class="tchip bad" title="${esc(t.url)} — ${esc(tr.info || '')}">${tr.code ? '✗' + tr.code : '✗'}</span>`;
+}
+
+function renderTable() {
   const rows = filtered();
   const tbody = $('#tbody');
   const MAX = 400;
   const shown = rows.slice(0, MAX);
-  const html = shown.map(r => rowHtml(r)).join('');
-  tbody.innerHTML = html;
-  $('#emptyState').style.display = state.proxies.size ? 'none' : 'block';
-  $('#footInfo').textContent = `${state.proxies.size.toLocaleString()} in pool · showing ${shown.length}${rows.length > MAX ? ` of ${rows.length.toLocaleString()} matching` : ''}`;
-  lastRender = performance.now();
-}
-
-function rowHtml(r) {
-  const stCls = r.st === 'alive' ? 'alive' : r.st === 'dead' ? 'dead' : r.st === 'checking' ? 'checking' : 'unchecked';
-  const stLbl = r.st === 'alive' ? 'alive' : r.st === 'dead' ? 'dead' : r.st === 'checking' ? 'checking' : 'queued';
-  const protos = r.pr.length
-    ? r.pr.map(p => `<span class="proto-chip ${p.startsWith('socks') ? 'socks' : p === 'https' ? 'tls' : ''}">${p.toUpperCase()}</span>`).join('')
-    : (r.st === 'checking' ? '<span class="dim">sniffing…</span>' : '<span class="dim">—</span>');
-  const anonCls = r.an === 'elite' ? 'elite' : r.an === 'anonymous' ? 'anonymous' : r.an === 'anonymous~' ? 'anonymous2' : r.an === 'transparent' ? 'transparent' : 'unknown';
-  const anonLbl = r.an === 'anonymous~' ? 'anon*' : r.an === 'unknown' ? 'unknown' : r.an;
-  const latPct = r.la == null ? 0 : Math.max(6, 100 - Math.min(100, (r.la / 30)));
-  const flag = r.geo && r.geo.countryCode ? flagOf(r.geo.countryCode) : '';
-  const geoTxt = r.geo ? esc(r.geo.country || '—') : '<span class="dim">—</span>';
-  const city = r.geo && r.geo.city && r.geo.city !== 'loopback' ? esc(r.geo.city) : '';
-  const tags = [];
-  if (r.geo && r.geo.proxyHost) tags.push('proxy-host');
-  if (r.geo && r.geo.hosting) tags.push('hosting');
-  return `<tr class="${r.st === 'checking' ? 'checking' : ''}" data-id="${esc(r.id)}">
+  const targets = state.targets.slice(0, 3);
+  const extra = state.targets.length > 3 ? `<span class="tchip">+${state.targets.length - 3}</span>` : '';
+  tbody.innerHTML = shown.map(r => {
+    const stCls = r.st === 'alive' ? 'alive' : r.st === 'dead' ? 'dead' : r.st === 'checking' ? 'checking' : 'unchecked';
+    const stLbl = r.st.toUpperCase();
+    const protos = r.pr.length
+      ? r.pr.map(p => `<span class="proto-chip ${p.startsWith('socks') ? 'socks' : p === 'https' ? 'tls' : ''}">${p.toUpperCase()}</span>`).join('')
+      : (r.st === 'checking' ? '<span class="dim">sniffing…</span>' : '<span class="dim">—</span>');
+    const anonCls = r.an === 'elite' ? 'elite' : r.an === 'anonymous' ? 'anonymous' : r.an === 'anonymous~' ? 'anonymous2' : r.an === 'transparent' ? 'transparent' : 'unknown';
+    const anonLbl = r.an === 'anonymous~' ? 'ANON*' : r.an.toUpperCase();
+    const latPct = r.la == null ? 0 : Math.max(6, 100 - Math.min(100, (r.la / 30)));
+    const flag = r.geo && r.geo.countryCode ? flagOf(r.geo.countryCode) : '';
+    const geoTxt = r.geo ? esc(r.geo.country || '—') : '<span class="dim">—</span>';
+    const city = r.geo && r.geo.city && r.geo.city !== 'loopback' ? esc(r.geo.city) : '';
+    const chips = state.targets.length ? targets.map(t => tchipHtml(r, t)).join('') + extra : '<span class="dim small">no targets</span>';
+    return `<tr class="${r.st === 'checking' ? 'checking' : ''}" data-id="${esc(r.id)}">
     <td><span class="st ${stCls}"><i></i>${stLbl}</span></td>
     <td class="addr">${esc(r.ip)}<span class="port">:${r.port}</span></td>
     <td>${protos}</td>
     <td><span class="badge ${anonCls}" title="${esc((r.mk || []).join(', '))}">${anonLbl}</span></td>
-    <td><div class="lat-cell"><div class="lat-bar"><b style="width:${latPct}%;background:${latColor(r.la)}"></b></div><span class="mono" style="color:${latColor(r.la)}">${fmtLat(r.la)}</span></div></td>
+    <td><div class="lat-cell"><div class="lat-bar"><b style="width:${latPct}%;background:${latColor(r.la)}"></b></div><span style="color:${latColor(r.la)}">${fmtLat(r.la)}</span></div></td>
     <td class="spd">${fmtSpeed(r.sp)}</td>
-    <td><div class="geo-cell">${flag ? `<span class="flag">${flag}</span>` : ''}<span>${geoTxt}</span>${city ? `<span class="city">${city}</span>` : ''}${tags.length ? `<span class="city">· ${tags.join(' · ')}</span>` : ''}</div></td>
-    <td class="dim" style="max-width:170px;overflow:hidden;text-overflow:ellipsis">${r.geo && r.geo.isp ? esc(r.geo.isp) : '—'}</td>
-    <td class="dim">${ago(r.lc)}</td>
+    <td><div class="geo-cell">${flag ? `<span class="flag">${flag}</span>` : ''}<span>${geoTxt}</span>${city ? `<span class="city">${city}</span>` : ''}</div></td>
+    <td class="isp-cell" title="${esc(r.geo && r.geo.isp || '')}">${r.geo && r.geo.isp ? esc(r.geo.isp) : '—'}</td>
+    <td><div class="tchips">${chips}</div></td>
     <td><div class="row-actions">
       <button class="icon-btn" data-act="recheck" title="Recheck now">↻</button>
       <button class="icon-btn" data-act="copy" title="Copy">⧉</button>
       <button class="icon-btn danger" data-act="remove" title="Remove">✕</button>
     </div></td>
   </tr>`;
+  }).join('');
+  $('#emptyState').style.display = state.proxies.size ? 'none' : 'block';
+  $('#footInfo').textContent = `${state.proxies.size.toLocaleString()} IN POOL · SHOWING ${shown.length}${rows.length > MAX ? ` OF ${rows.length.toLocaleString()} MATCHED` : ''}`;
 }
 
 function renderKpis() {
@@ -251,30 +252,47 @@ function renderKpis() {
   $('#vAlive').textContent = (s.alive || 0).toLocaleString();
   $('#vDead').textContent = (s.dead || 0).toLocaleString();
   $('#vChecking').textContent = ((s.checking || 0) + (state.progress ? state.progress.running : 0)).toLocaleString();
-  $('#tChecking').textContent = 'queued ' + (state.progress ? state.progress.queued : 0);
+  $('#tChecking').textContent = 'QUEUED ' + (state.progress ? state.progress.queued : 0);
   $('#vLat').textContent = s.avgLatencyMs != null ? fmtLat(s.avgLatencyMs) : '—';
   $('#vElite').textContent = (s.elite || 0).toLocaleString();
-  $('#tElite').textContent = `${s.anonymous || 0} anon · ${s.transparent || 0} transp`;
+  $('#tElite').textContent = `${s.anonymous || 0} ANON · ${s.transparent || 0} TRANSP`;
   $('#vGeo').textContent = (s.geoResolved || 0).toLocaleString();
-  $('#tTotal').textContent = s.unchecked ? `${s.unchecked.toLocaleString()} unchecked` : '—';
-  $('#tAlive').textContent = s.alive ? ((s.alive / Math.max(1, s.total) * 100).toFixed(0) + '% of pool') : '—';
-  $('#tDead').textContent = s.dead ? ((s.dead / Math.max(1, s.total) * 100).toFixed(0) + '% of pool') : '—';
-  $('#rateChip').innerHTML = `<b>${(state.progress ? state.progress.perMin : 0)}</b> checks/min`;
-  $('#kpiAlive').classList.toggle('hot', !!s.alive);
+  $('#tTotal').textContent = s.unchecked ? `${s.unchecked.toLocaleString()} UNCHECKED` : '—';
+  $('#tAlive').textContent = s.alive ? ((s.alive / Math.max(1, s.total) * 100).toFixed(0) + '% OF POOL') : '—';
+  $('#tDead').textContent = s.dead ? ((s.dead / Math.max(1, s.total) * 100).toFixed(0) + '% OF POOL') : '—';
+  $('#rateChip').innerHTML = `<b>${(state.progress ? state.progress.perMin : 0)}</b>/MIN`;
 }
 
 function updateEngineUI() {
   const pill = $('#enginePill'), btn = $('#btnEngine'), lbl = $('#engineLbl');
   const running = state.engine || (state.progress && (state.progress.running > 0 || state.progress.queued > 0));
   pill.classList.toggle('on', !!running);
-  lbl.textContent = running ? 'running' : 'idle';
+  lbl.textContent = running ? 'RUNNING' : 'IDLE';
   btn.className = 'btn ' + (running ? 'stop' : 'go');
-  btn.innerHTML = running ? '■ Stop' : '▶ Start check';
+  btn.innerHTML = running ? '■ STOP' : '▶ RUN CHECK';
   const p = state.progress;
-  $('#tLat').textContent = p && p.running ? `checking ${p.running} now` : 'alive proxies';
+  $('#tLat').textContent = p && p.running ? `CHECKING ${p.running} NOW` : 'ALIVE PROXIES';
 }
 
-/* sparkline of checks/min */
+/* ticker */
+function renderTicker() {
+  const s = state.stats;
+  const p = state.progress || { perMin: 0 };
+  const gw = state.gw && state.gw.stats || {};
+  const tr = state.trun && state.trun.progress || {};
+  let parts = [
+    `YORI`, `ALIVE <b>${s.alive || 0}</b>`, `DEAD <b>${s.dead || 0}</b>`, `ELITE <b>${s.elite || 0}</b>`,
+    `ANON <b>${s.anonymous || 0}</b>`, `AVG LAT <b>${s.avgLatencyMs != null ? fmtLat(s.avgLatencyMs) : '—'}</b>`,
+    `<b>${p.perMin || 0}</b> CHECKS/MIN`,
+  ];
+  if (state.trun.running) parts.push(`TARGET RUN <b>${tr.done || 0}/${tr.total || 0}</b>`);
+  parts.push(`GW SERVED <b>${gw.served || 0}</b>`, `POOL <b>${s.total || 0}</b>`, 'YOUR TARGETS. YOUR RULES.');
+  const html = parts.join('<i>▓</i>');
+  $('#tickA').innerHTML = html;
+  $('#tickB').innerHTML = html;
+}
+
+/* sparkline */
 function drawSpark() {
   const cv = $('#spark');
   const dpr = window.devicePixelRatio || 1;
@@ -293,12 +311,12 @@ function drawSpark() {
     const y = h - 2 - (v / max) * (h - 6);
     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
-  ctx.strokeStyle = 'rgba(34,211,238,0.9)';
+  ctx.strokeStyle = 'rgba(217,255,61,0.95)';
   ctx.lineWidth = 1.6;
   ctx.stroke();
   ctx.lineTo(w - 1, h); ctx.lineTo(1, h); ctx.closePath();
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, 'rgba(34,211,238,0.25)'); g.addColorStop(1, 'rgba(34,211,238,0)');
+  g.addColorStop(0, 'rgba(217,255,61,0.3)'); g.addColorStop(1, 'rgba(217,255,61,0)');
   ctx.fillStyle = g; ctx.fill();
 }
 
@@ -316,24 +334,20 @@ function drawMapStatic() {
   const cv = $('#map');
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, MAP_W, MAP_H);
-  ctx.fillStyle = 'rgba(10,16,28,0.5)';
+  ctx.fillStyle = 'rgba(8,10,18,0.55)';
   ctx.fillRect(0, 0, MAP_W, MAP_H);
   if (!mapLand) return;
   ctx.beginPath();
-  for (const c of mapLand) {
-    for (const poly of c.rings) {
-      for (const ring of poly) {
-        ring.forEach(([lon, lat], i) => {
-          const [x, y] = project(lon, lat);
-          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-        });
-        ctx.closePath();
-      }
-    }
+  for (const c of mapLand) for (const poly of c.rings) for (const ring of poly) {
+    ring.forEach(([lon, lat], i) => {
+      const [x, y] = project(lon, lat);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
   }
-  ctx.fillStyle = '#131c2e';
+  ctx.fillStyle = '#171a26';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(94,234,212,0.13)';
+  ctx.strokeStyle = 'rgba(217,255,61,0.16)';
   ctx.lineWidth = 0.6;
   ctx.stroke();
 }
@@ -361,12 +375,11 @@ function drawMapDots() {
   const cv = $('#map');
   const ctx = cv.getContext('2d');
   const pts = geoPoints();
-  // redraw base cheaply: static image cached in offscreen
   if (!drawMapDots.base) {
     const off = document.createElement('canvas');
     off.width = MAP_W; off.height = MAP_H;
     const octx = off.getContext('2d');
-    octx.fillStyle = 'rgba(10,16,28,0.5)';
+    octx.fillStyle = 'rgba(8,10,18,0.55)';
     octx.fillRect(0, 0, MAP_W, MAP_H);
     octx.beginPath();
     for (const c of mapLand) for (const poly of c.rings) for (const ring of poly) {
@@ -376,30 +389,29 @@ function drawMapDots() {
       });
       octx.closePath();
     }
-    octx.fillStyle = '#131c2e'; octx.fill();
-    octx.strokeStyle = 'rgba(94,234,212,0.14)'; octx.lineWidth = 0.6; octx.stroke();
+    octx.fillStyle = '#171a26'; octx.fill();
+    octx.strokeStyle = 'rgba(217,255,61,0.16)'; octx.lineWidth = 0.6; octx.stroke();
     drawMapDots.base = off;
   }
   ctx.clearRect(0, 0, MAP_W, MAP_H);
   ctx.drawImage(drawMapDots.base, 0, 0);
-
   const max = Math.max(1, ...pts.map(p => p.n));
   for (const p of pts) {
     const [x, y] = project(p.lon, p.lat);
     const rad = 3 + (p.n / max) * 7;
     const pulse = (Math.sin(mapPulse * Math.PI) + 1) / 2;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, rad * (1.8 + pulse * 0.7));
-    g.addColorStop(0, 'rgba(34,211,238,0.85)');
-    g.addColorStop(0.4, 'rgba(34,211,238,0.28)');
-    g.addColorStop(1, 'rgba(34,211,238,0)');
+    const rr = rad * (1.8 + pulse * 0.7);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rr);
+    g.addColorStop(0, 'rgba(217,255,61,0.9)');
+    g.addColorStop(0.4, 'rgba(217,255,61,0.26)');
+    g.addColorStop(1, 'rgba(217,255,61,0)');
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, rad * (1.8 + pulse * 0.7), 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#a5f3fc';
+    ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f4ffd0';
     ctx.beginPath(); ctx.arc(x, y, Math.max(1.6, rad * 0.28), 0, Math.PI * 2); ctx.fill();
   }
-  const empt = $('#mapEmpty');
-  empt.style.display = pts.length ? 'none' : 'flex';
-  $('#mapCount').textContent = pts.length ? `${pts.reduce((a, p) => a + p.n, 0)} located` : '';
+  $('#mapEmpty').style.display = pts.length ? 'none' : 'flex';
+  $('#mapCount').textContent = pts.length ? `${pts.reduce((a, p) => a + p.n, 0)} LOCATED` : '';
 }
 
 $('#map').addEventListener('mousemove', (e) => {
@@ -419,7 +431,7 @@ $('#map').addEventListener('mousemove', (e) => {
     tip.style.display = 'block';
     tip.style.left = (px / MAP_W * rect.width + 12) + 'px';
     tip.style.top = (py / MAP_H * rect.height - 10) + 'px';
-    tip.innerHTML = `${flagOf(best.cc)} <b>${esc(best.name)}</b> · ${best.n} prox${best.n > 1 ? 'ies' : 'y'}`;
+    tip.innerHTML = `${flagOf(best.cc)} <b>${esc(best.name)}</b> · ${best.n} PROX${best.n > 1 ? 'IES' : 'Y'}`;
   } else tip.style.display = 'none';
 });
 $('#map').addEventListener('mouseleave', () => { $('#mapTip').style.display = 'none'; });
@@ -435,7 +447,7 @@ function renderCountries() {
   const list = [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 12);
   const max = list.length ? list[0].n : 1;
   $('#countryList').innerHTML = list.map(c => `
-    <div class="crow" data-cc="${esc(c.cc)}" title="Filter: ${esc(c.name)}">
+    <div class="crow" data-cc="${esc(c.cc)}" title="FILTER: ${esc(c.name)}">
       <span>${flagOf(c.cc)}</span>
       <span class="bar"><b style="width:${(c.n / max * 100).toFixed(0)}%"></b></span>
       <span class="n">${c.n}</span>
@@ -453,17 +465,128 @@ function syncCountryOptions() {
   const sel = $('#fCountry');
   const cur = state.filters.country;
   const counts = new Map();
-  for (const r of state.proxies.values()) {
-    if (r.geo && r.geo.countryCode) {
-      const k = r.geo.countryCode;
-      counts.set(k, (counts.get(k) || 0) + 1);
-    }
-  }
+  for (const r of state.proxies.values()) if (r.geo && r.geo.countryCode) counts.set(r.geo.countryCode, (counts.get(r.geo.countryCode) || 0) + 1);
   const opts = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  sel.innerHTML = `<option value="all">Country: all</option>` +
+  sel.innerHTML = `<option value="all">COUNTRY: ALL</option>` +
     (cur !== 'all' && !counts.has(cur) ? `<option value="${esc(cur)}">${esc(cur)}</option>` : '') +
     opts.map(([cc, n]) => `<option value="${esc(cc)}">${flagOf(cc)} ${esc(cc)} (${n})</option>`).join('');
   sel.value = cur;
+}
+
+/* ───────────────────────── custom targets ───────────────────────── */
+
+function targetAgg(t) {
+  let tested = 0, ok = 0, msSum = 0, running = 0;
+  for (const r of state.proxies.values()) {
+    const tr = r.tr && r.tr[t.id];
+    if (!tr) continue;
+    if (tr.info === 'testing…') { running++; continue; }
+    tested++;
+    if (tr.ok === 1) { ok++; msSum += tr.ms || 0; }
+  }
+  return { tested, ok, running, avg: ok ? Math.round(msSum / ok) : null };
+}
+
+function renderTargets() {
+  const box = $('#tgtList');
+  if (!box) return;
+  const run = state.trun || {};
+  if (run.running) {
+    const p = run.progress || {};
+    $('#tgtRunInfo').textContent = `RUN ${p.done || 0}/${p.total || 0}`;
+  } else $('#tgtRunInfo').textContent = '';
+
+  if (!state.targets.length) {
+    box.innerHTML = `<div class="dim mono small" style="padding:6px 2px">// NO TARGETS YET — ADD YOUR URL ABOVE</div>`;
+    return;
+  }
+  box.innerHTML = state.targets.map(t => {
+    const a = targetAgg(t);
+    const isRun = run.running === t.id;
+    const resLine = a.tested || a.running
+      ? `<b>${a.ok}</b>/${a.tested} PASS${a.avg != null ? ` · AVG ${a.avg}MS` : ''}${a.running ? ` · <span style="color:var(--amber)">▮${a.running}</span>` : ''}`
+      : `<span class="zero">NOT RUN YET</span>`;
+    return `<div class="tgt-item ${isRun ? 'run' : ''}" data-tid="${esc(t.id)}">
+      <div class="tgt-top">
+        <span class="tgt-url" title="${esc(t.url)}">${esc(t.url)}</span>
+        ${t.keyword ? `<span class="tgt-kw" title="body must contain">◈ ${esc(t.keyword)}</span>` : ''}
+        <button class="tgt-del" data-tdel="${esc(t.id)}" title="Delete target">✕</button>
+      </div>
+      <div class="tgt-bot">
+        <span class="tgt-res">${resLine}</span>
+        ${isRun
+          ? `<button class="btn sm stop tgt-run" data-trun="${esc(t.id)}">■ ${((run.progress || {}).done) || 0}/${((run.progress || {}).total) || 0}</button>`
+          : `<button class="btn sm acid tgt-run" data-trun="${esc(t.id)}" data-mode="alive" title="Fire all alive proxies at this URL">▶ RUN ALIVE</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ───────────────────────── inspector ───────────────────────── */
+
+let inspId = null;
+function openInspector(id) {
+  const r = state.proxies.get(id);
+  if (!r) return;
+  inspId = id;
+  const stCls = r.st === 'alive' ? 'alive' : r.st === 'dead' ? 'dead' : r.st === 'checking' ? 'checking' : '';
+  $('#inspTitle').textContent = r.id;
+  $('#inspTitle').classList.add('insp-title-mono');
+  const stamp = $('#inspStamp');
+  stamp.textContent = r.st.toUpperCase();
+  stamp.className = `stamp sm ${stCls}`;
+  const cell = (l, v) => `<div class="insp-cell"><div class="l">${l}</div><div class="v">${v}</div></div>`;
+  const anonCls = r.an === 'elite' ? 'elite' : r.an === 'anonymous' ? 'anonymous' : r.an === 'anonymous~' ? 'anonymous2' : r.an === 'transparent' ? 'transparent' : 'unknown';
+  const body = `
+    <div class="insp-grid">
+      ${cell('PROTOCOLS', r.pr.length ? r.pr.map(p => `<span class="proto-chip ${p.startsWith('socks') ? 'socks' : p === 'https' ? 'tls' : ''}">${p.toUpperCase()}</span>`).join(' ') : '—')}
+      ${cell('ANONYMITY', `<span class="badge ${anonCls}">${r.an === 'anonymous~' ? 'ANON*' : esc(r.an.toUpperCase())}</span>`)}
+      ${cell('EXIT IP', r.ex ? esc(r.ex) : '—')}
+      ${cell('LATENCY', `${fmtLat(r.la)} ${r.al != null ? `<small>avg ${fmtLat(r.al)}</small>` : ''}`)}
+      ${cell('SPEED', fmtSpeed(r.sp))}
+      ${cell('GEO', r.geo ? `${r.geo.countryCode ? flagOf(r.geo.countryCode) + ' ' : ''}${esc(r.geo.country || '—')}${r.geo.city ? ' · ' + esc(r.geo.city) : ''}` : '—')}
+      ${cell('ISP', r.geo && r.geo.isp ? esc(r.geo.isp) : '—')}
+      ${cell('CHECKS', `${r.ck} total · ${r.fk} fail${r.gu ? ` · ${r.gu} gw uses` : ''}`)}
+      ${cell('LAST CHECK', ago(r.lc))}
+    </div>
+    ${r.mk && r.mk.length ? `<div class="insp-sec">// LEAKED PROXY HEADERS</div><div class="insp-markers">${r.mk.map(m => `<span>${esc(m)}</span>`).join('')}</div>` : ''}
+    <div class="insp-sec">// TARGET RESULTS</div>
+    ${state.targets.length ? state.targets.map(t => {
+      const tr = r.tr && r.tr[t.id];
+      let line;
+      if (!tr) line = `<span class="dim">— not tested</span>`;
+      else if (tr.info === 'testing…') line = `<span class="tchip run">▮▮ TESTING</span>`;
+      else if (tr.ok === 1) line = `<span class="ok">${tr.code || 'OK'} · ${tr.ms}ms · ${fmtBytes(tr.bytes)}</span><span>${esc(tr.info || '')}</span>`;
+      else line = `<span class="bad">${tr.code ? 'HTTP ' + tr.code : 'FAILED'} · ${tr.ms != null ? tr.ms + 'ms' : ''}</span><span>${esc(tr.info || '')}</span>`;
+      return `<div class="insp-tgt"><div class="u">${esc(t.url)}${t.keyword ? ` <span class="tgt-kw">◈ ${esc(t.keyword)}</span>` : ''}</div><div class="r">${line}</div></div>`;
+    }).join('') : '<div class="dim mono small">// NO TARGETS CONFIGURED — ADD ONE IN THE CUSTOM TARGETS PANEL</div>'}
+    ${r.er ? `<div class="insp-sec">// LAST ERROR</div><div class="insp-err">${esc(r.er)}</div>` : ''}
+  `;
+  $('#inspBody').innerHTML = body;
+  $('#inspFoot').innerHTML = `
+    <button class="btn sm ghost" data-iact="recheck">↻ RECHECK</button>
+    <button class="btn sm ghost" data-iact="copy">⧉ COPY</button>
+    <span style="flex:1"></span>
+    <button class="btn sm danger" data-iact="remove">✕ REMOVE</button>`;
+  $$('#inspFoot [data-iact]').forEach(b => b.onclick = () => rowAction(b.dataset.iact, id));
+  $('#inspectorOverlay').classList.add('open');
+}
+
+async function rowAction(act, id) {
+  if (act === 'copy') {
+    const r = state.proxies.get(id);
+    await navigator.clipboard.writeText(r && r.pr.length ? `${r.pr[0]}://${id}` : id).catch(() => {});
+    toast('ok', 'COPIED ' + id);
+  } else if (act === 'recheck') {
+    await fetch('/api/proxy/recheck', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
+    toast('info', 'RECHECKING ' + id);
+  } else if (act === 'remove') {
+    await fetch('/api/proxy/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
+    state.proxies.delete(id);
+    $('#inspectorOverlay').classList.remove('open');
+    renderLive();
+    toast('ok', 'REMOVED ' + id);
+  }
 }
 
 /* ───────────────────────── console ───────────────────────── */
@@ -494,12 +617,9 @@ function renderGw() {
   $('#gwTunnels').textContent = gw.stats.activeTunnels || 0;
   $('#gwBytes').textContent = fmtBytes(gw.stats.bytesDown || 0);
   $('#gwMode').value = gw.cfg.mode;
-  if (document.activeElement !== $('#gwTestUrl')) {
-    // keep user's edits
-  }
   $('#gwEndpoint').textContent = `http://localhost:${gw.cfg.port}`;
   const exits = gw.stats.lastExits || [];
-  $('#gwExits').innerHTML = exits.length ? `<span class="dim" style="font-size:11px">recent exits:</span>` + exits.slice(0, 6).map(e =>
+  $('#gwExits').innerHTML = exits.length ? `<span class="dim mono small">RECENT EXITS:</span>` + exits.slice(0, 6).map(e =>
     `<span class="exit-chip" title="${esc(e.id)}">${esc(e.exitIp || e.id)}${e.country ? ' ' + flagOf(e.country) : ''}</span>`).join('') : '';
 }
 
@@ -513,7 +633,7 @@ function suggestTestUrl() {
 async function gwTest() {
   const url = $('#gwTestUrl').value.trim();
   const box = $('#gwResult');
-  if (!url) { toast('err', 'Enter a URL to fetch'); return; }
+  if (!url) { toast('err', 'ENTER A URL TO FETCH'); return; }
   box.classList.add('show');
   box.innerHTML = '<span class="dim">rotating through healthy proxies…</span>';
   try {
@@ -521,7 +641,7 @@ async function gwTest() {
     const j = await res.json();
     if (j.ok) {
       const bodyLine = String(j.body || '').split(/\r?\n/).find(l => l.trim()) || '';
-      box.innerHTML = `<span class="ok">✓ ${res.status}</span> via <span class="via">${esc(j.via)}</span> · exit <span class="via">${esc(j.exitIp || '?')}</span> ${j.country ? flagOf(j.country) : ''} · ${j.ms}ms<br>${esc(bodyLine.slice(0, 220))}`;
+      box.innerHTML = `<span class="ok">✓ ${res.status}</span> VIA <span class="via">${esc(j.via)}</span> · EXIT <span class="via">${esc(j.exitIp || '?')}</span> ${j.country ? flagOf(j.country) : ''} · ${j.ms}MS<br>${esc(bodyLine.slice(0, 220))}`;
     } else {
       box.innerHTML = `<span class="fail">✗ ${esc(j.error)}</span>`;
     }
@@ -540,7 +660,7 @@ function bindUI() {
     else {
       const res = await fetch('/api/check/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'unchecked' }) });
       const j = await res.json();
-      toast('info', j.queued ? `Checking ${j.queued} proxies…` : 'Nothing to check — import proxies first');
+      toast('info', j.queued ? `CHECKING ${j.queued} PROXIES…` : 'NOTHING TO CHECK — IMPORT FIRST');
     }
   };
   $('#btnImport').onclick = openImport;
@@ -565,14 +685,14 @@ function bindUI() {
     renderLive();
   });
 
-  // export menu
+  // export
   $('#btnExport').onclick = (e) => { e.stopPropagation(); $('#exportMenu').classList.toggle('open'); };
   document.addEventListener('click', () => $('#exportMenu').classList.remove('open'));
   $$('#exportMenu button').forEach(b => b.onclick = () => {
     const f = state.filters;
     const p = new URLSearchParams();
     p.set('format', b.dataset.fmt === 'txt-alive' ? 'txt' : b.dataset.fmt);
-    if (b.dataset.fmt === 'txt-alive') { p.set('status', 'alive'); }
+    if (b.dataset.fmt === 'txt-alive') p.set('status', 'alive');
     else {
       if (f.status !== 'all') p.set('status', f.status);
       if (f.proto !== 'all') p.set('proto', f.proto);
@@ -581,58 +701,80 @@ function bindUI() {
       if (f.q.trim()) p.set('q', f.q.trim());
     }
     window.open('/api/export?' + p.toString());
-    toast('info', 'Export started');
+    toast('info', 'EXPORT STARTED');
   });
 
-  // table actions
-  $('#tbody').addEventListener('click', async (e) => {
+  // table: row click → inspector, action buttons → rowAction
+  $('#tbody').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-act]');
-    if (!btn) return;
-    const tr = btn.closest('tr');
+    const tr = e.target.closest('tr');
+    if (!tr) return;
     const id = tr.dataset.id;
-    if (btn.dataset.act === 'copy') {
-      const r = state.proxies.get(id);
-      await navigator.clipboard.writeText(r && r.pr.length ? `${r.pr[0]}://${id}` : id).catch(() => {});
-      toast('ok', 'Copied ' + id);
-    } else if (btn.dataset.act === 'recheck') {
-      await fetch('/api/proxy/recheck', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
-      toast('info', 'Rechecking ' + id);
-    } else if (btn.dataset.act === 'remove') {
-      await fetch('/api/proxy/remove', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
-      state.proxies.delete(id);
-      renderLive();
-    }
+    if (btn) return rowAction(btn.dataset.act, id);
+    openInspector(id);
   });
 
   $('#btnRecheckDead').onclick = async () => {
     const r = await fetch('/api/check/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'dead' }) });
     const j = await r.json();
-    toast('info', j.queued ? `Rechecking ${j.queued} dead proxies` : 'No dead proxies');
+    toast('info', j.queued ? `RECHECKING ${j.queued} DEAD PROXIES` : 'NO DEAD PROXIES');
   };
   $('#btnClearDead').onclick = async () => {
     const r = await fetch('/api/pool/dead/clear', { method: 'POST' });
     const j = await r.json();
-    toast('ok', `Removed ${j.removed} dead proxies`);
+    toast('ok', `REMOVED ${j.removed} DEAD PROXIES`);
   };
+
+  // targets
+  $('#tgtAdd').onclick = async () => {
+    const url = $('#tgtUrl').value.trim();
+    const keyword = $('#tgtKw').value.trim();
+    if (!url) return toast('err', 'GIVE A TARGET URL');
+    const res = await fetch('/api/targets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url, keyword }) });
+    const j = await res.json();
+    if (j.error) return toast('err', j.error.toUpperCase());
+    $('#tgtUrl').value = ''; $('#tgtKw').value = '';
+    toast('ok', 'TARGET ADDED — RUN IT');
+  };
+  $('#tgtList').addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-tdel]');
+    if (del) {
+      await fetch('/api/targets/' + del.dataset.tdel, { method: 'DELETE' });
+      toast('ok', 'TARGET DELETED');
+      return;
+    }
+    const run = e.target.closest('[data-trun]');
+    if (run) {
+      if (state.trun.running) {
+        await fetch('/api/targets/stop', { method: 'POST' });
+        toast('info', 'STOPPING TARGET RUN');
+        return;
+      }
+      const mode = run.dataset.mode || 'alive';
+      const res = await fetch('/api/targets/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: run.dataset.trun, mode }) });
+      const j = await res.json();
+      if (j.error) return toast('err', j.error.toUpperCase());
+      toast('info', `TARGET RUN STARTED (${j.queued || 0} PROXIES)`);
+    }
+  });
 
   // gateway
   $('#gwToggle').onchange = async (e) => {
     const on = e.target.checked;
-    const endpoint = on ? '/api/gateway/start' : '/api/gateway/stop';
-    const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(on ? {} : {}) });
+    const res = await fetch(on ? '/api/gateway/start' : '/api/gateway/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) });
     const j = await res.json();
     state.gw = j.gateway;
-    if (j.ok || !on) toast('ok', on ? `Gateway live on :${j.gateway.cfg.port}` : 'Gateway stopped');
-    else toast('err', 'Could not start gateway (port busy?)');
+    if (j.ok || !on) toast('ok', on ? `GATEWAY LIVE ON :${j.gateway.cfg.port}` : 'GATEWAY STOPPED');
+    else toast('err', 'COULD NOT START GATEWAY (PORT BUSY?)');
     renderGw();
   };
   $('#gwMode').onchange = async (e) => {
     await fetch('/api/gateway/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: e.target.value }) });
-    toast('ok', 'Rotation mode: ' + e.target.value);
+    toast('ok', 'ROTATION MODE: ' + e.target.value);
   };
   $('#gwTest').onclick = gwTest;
   $('#gwTestUrl').addEventListener('focus', suggestTestUrl);
-  $('#gwCopy').onclick = () => { navigator.clipboard.writeText($('#gwEndpoint').textContent).catch(() => {}); toast('ok', 'Endpoint copied'); };
+  $('#gwCopy').onclick = () => { navigator.clipboard.writeText($('#gwEndpoint').textContent).catch(() => {}); toast('ok', 'ENDPOINT COPIED'); };
 
   // import modal
   $$('#importOverlay .tab').forEach(t => t.onclick = () => {
@@ -644,15 +786,15 @@ function bindUI() {
   });
   $('#pasteTa').addEventListener('input', (e) => {
     const lines = e.target.value.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'));
-    $('#importCnt').textContent = lines.length + ' lines';
+    $('#importCnt').textContent = lines.length + ' LINES';
   });
   $('#btnDoImport').onclick = async () => {
     const text = $('#pasteTa').value;
-    if (!text.trim()) return toast('err', 'Nothing to import');
+    if (!text.trim()) return toast('err', 'NOTHING TO IMPORT');
     const res = await fetch('/api/import/text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
     const j = await res.json();
     $('#importCnt').textContent = '';
-    if (j.added + j.updated === 0) toast('err', `No valid proxies found (${j.invalid} invalid lines)`);
+    if (j.added + j.updated === 0) toast('err', `NO VALID PROXIES (${j.invalid} INVALID LINES)`);
   };
   const drop = $('#fileDrop');
   drop.onclick = () => $('#fileInput').click();
@@ -665,37 +807,36 @@ function bindUI() {
     rd.onload = async () => {
       const res = await fetch('/api/import/text', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: String(rd.result) }) });
       const j = await res.json();
-      toast(j.added ? 'ok' : 'err', `${f.name}: +${j.added} new, ${j.updated} known, ${j.invalid} invalid`);
+      toast(j.added ? 'ok' : 'err', `${f.name}: +${j.added} NEW · ${j.updated} KNOWN · ${j.invalid} INVALID`);
     };
     rd.readAsText(f);
   }
-  // sources tab
   (async () => {
     const s = await (await fetch('/api/state')).json();
     $('#srcList').innerHTML = s.sources.map(src => `
       <div class="src-item" data-src="${esc(src.id)}">
         <span class="cb"></span><span>${esc(src.name)}</span>
-        <span class="kinds">${src.kinds.map(k => `<span class="proto-chip ${k.startsWith('socks') ? 'socks' : k === 'https' ? 'tls' : ''}" style="font-size:9px">${k}</span>`).join('')}</span>
+        <span class="kinds">${src.kinds.map(k => `<span class="proto-chip ${k.startsWith('socks') ? 'socks' : k === 'https' ? 'tls' : ''}" style="font-size:8.5px">${k}</span>`).join('')}</span>
       </div>`).join('');
     $$('#srcList .src-item').forEach(el => el.onclick = () => el.classList.toggle('on'));
   })().catch(() => {});
   $('#btnSrcFetch').onclick = async () => {
     const ids = $$('#srcList .src-item.on').map(el => el.dataset.src);
-    if (!ids.length) return toast('err', 'Select at least one source');
+    if (!ids.length) return toast('err', 'SELECT AT LEAST ONE SOURCE');
     $('#btnSrcFetch').disabled = true;
     await fetch('/api/sources/fetch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sources: ids }) });
-    toast('info', 'Fetching sources — results stream into the pool');
+    toast('info', 'FETCHING SOURCES — RESULTS STREAM INTO THE POOL');
     setTimeout(() => { $('#btnSrcFetch').disabled = false; }, 4000);
   };
 
-  // close overlays
+  // overlays
   $$('.overlay').forEach(o => {
     o.addEventListener('click', (e) => { if (e.target === o) o.classList.remove('open'); });
     $$('[data-close]', o).forEach(b => b.onclick = () => o.classList.remove('open'));
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') $$('.overlay.open').forEach(o => o.classList.remove('open'));
-    if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); $('#q').focus(); }
+    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) { e.preventDefault(); $('#q').focus(); }
   });
 
   // settings
@@ -703,21 +844,22 @@ function bindUI() {
   $('#btnResetResults').onclick = async () => {
     if (!confirm('Reset all check results? The pool stays, statuses go back to unchecked.')) return;
     await fetch('/api/pool/reset-results', { method: 'POST' });
-    toast('ok', 'Results reset');
+    toast('ok', 'RESULTS RESET');
   };
   $('#btnWipe').onclick = async () => {
     if (!confirm('Wipe the ENTIRE pool? This cannot be undone.')) return;
     await fetch('/api/pool/clear', { method: 'POST' });
-    toast('ok', 'Pool wiped');
+    toast('ok', 'POOL WIPED');
   };
 }
 
-/* ───────────────────────── import / settings modals ───────────────────────── */
+/* ───────────────────────── modals ───────────────────────── */
 
 function openImport() {
   $('#importOverlay').classList.add('open');
   setTimeout(() => $('#pasteTa').focus(), 60);
 }
+window.openImport = openImport;
 
 function openSettings() { fillSettings(); $('#settingsOverlay').classList.add('open'); }
 
@@ -753,8 +895,8 @@ async function saveSettings() {
     gateway: { port: +$('#sGwPort').value || 8899, mode: $('#sGwMode').value },
   };
   await fetch('/api/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  $('#setSaved').textContent = 'saved ' + new Date().toLocaleTimeString();
-  toast('ok', 'Settings saved');
+  $('#setSaved').textContent = 'SAVED ' + new Date().toLocaleTimeString();
+  toast('ok', 'SETTINGS SAVED');
   await resync();
 }
 

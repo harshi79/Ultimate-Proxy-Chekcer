@@ -1,7 +1,7 @@
 {
-  "name": "ultimate-proxy-checker",
+  "name": "yori-proxy-checker",
   "version": "1.0.0",
-  "description": "Deep-inspection proxy checker with anonymity detection, geo mapping, and a rotating proxy gateway — live dashboard included",
+  "description": "Yori — deep-inspection proxy checker: custom target testing, anonymity forensics, rotating gateway, glass×brutalism live dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

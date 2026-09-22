@@ -390,6 +390,16 @@ async function httpDirect(targetUrl, { timeoutMs = 8000, maxBytes = 512 * 1024 }
   } catch (e) { sock.destroy(); throw e; }
 }
 
+/** Upgrade an established socket to TLS (for tunneled requests). */
+function tlsUpgrade(sock, hostname, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const tlsSock = tls.connect({ socket: sock, servername: net.isIP(hostname) ? undefined : hostname, rejectUnauthorized: false });
+    const t = setTimeout(() => { tlsSock.destroy(); reject(new ProbeError('TLS timeout', 'ETIMEDOUT')); }, timeoutMs);
+    tlsSock.once('secureConnect', () => { clearTimeout(t); resolve(tlsSock); });
+    tlsSock.once('error', (e) => { clearTimeout(t); reject(new ProbeError('TLS: ' + e.message, 'E_TLS')); });
+  });
+}
+
 /** Quick TCP reachability check. */
 async function tcpAlive(ip, port, timeoutMs) {
   const sock = await connectSock(ip, port, timeoutMs);
@@ -417,4 +427,5 @@ module.exports = {
   ProbeError,
   connectSock, httpViaProxy, httpsViaProxy, socks5ViaProxy, socks4ViaProxy,
   socks5Connect, socks4Connect, tcpAlive, tunnelThrough, dechunk, httpDirect,
+  httpOverSocket, tlsUpgrade,
 };

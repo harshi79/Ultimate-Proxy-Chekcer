@@ -14,6 +14,7 @@ const { JudgePool, classify } = require('./judges');
 const { GeoQueue } = require('./geo');
 const { Checker } = require('./checker');
 const { Gateway } = require('./gateway');
+const { TargetRunner } = require('./targets');
 const { SOURCES, fetchSource } = require('./sources');
 
 function createApp(opts = {}) {
@@ -33,6 +34,7 @@ function createApp(opts = {}) {
   const geo = new GeoQueue(log);
   const checker = new Checker(store, judges, geo, config, log);
   const gateway = new Gateway(store, config, log);
+  const targets = new TargetRunner(store, config, log);
 
   /* ── live hub: batch events → websocket clients ── */
   const hub = {
@@ -56,6 +58,7 @@ function createApp(opts = {}) {
       gw: gateway.snapshot(),
       geo: geo.stats(),
       engine: checker.isRunning(),
+      trun: targets.snapshot(),
     };
     hub.broadcast(payload);
   }, 400).unref();
@@ -67,6 +70,8 @@ function createApp(opts = {}) {
   checker.on('drain', () => { store.scheduleSave(); log('info', 'Check run complete'); });
   gateway.on('stats', () => {});
   gateway.on('state', () => hub.broadcast({ t: 'gateway', gw: gateway.snapshot() }));
+  targets.on('state', () => hub.broadcast({ t: 'trun', run: targets.snapshot() }));
+  targets.on('progress', () => {}); // per-tick snapshot carries progress
   store.on('updates', recs => { for (const r of recs) hub.pushUpdate(r); store.scheduleSave(); });
   store.on('removed', () => hub.broadcast({ t: 'reset' }));
   store.on('cleared', () => hub.broadcast({ t: 'reset' }));
@@ -101,6 +106,8 @@ function createApp(opts = {}) {
       engine: checker.isRunning(),
       gateway: gateway.snapshot(),
       geo: geo.stats(),
+      targets: config.get().targets || [],
+      targetRun: targets.snapshot(),
       logs: logs.slice(-200),
       proxies: [...store.all()].map(r => compactMode ? compact(r) : r),
     });
@@ -219,6 +226,52 @@ function createApp(opts = {}) {
     res.json({ realIp: ip, echoAvailable: judges.echoAvailable, judges: judges.list().map(j => ({ url: j.url, health: judges.health.get(j.url) || {} })) });
   });
 
+  /* ── custom targets ── */
+  api.get('/targets', (req, res) => res.json({ targets: config.get().targets || [], run: targets.snapshot() }));
+
+  api.post('/targets', (req, res) => {
+    let url = String(req.body?.url || '').trim();
+    const keyword = String(req.body?.keyword || '').trim().slice(0, 120);
+    if (!url) return res.status(400).json({ error: 'url required' });
+    if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+    try {
+      const u = new URL(url);
+      if (!/^https?:$/.test(u.protocol) || !u.hostname) throw new Error('bad protocol');
+      url = u.href;
+    } catch { return res.status(400).json({ error: 'invalid URL' }); }
+    const list = config.get().targets || [];
+    if (list.some(t => t.url === url)) return res.status(400).json({ error: 'target already exists' });
+    const t = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), url, keyword };
+    list.push(t);
+    config.update({ targets: list });
+    log('info', `Target added: ${url}${keyword ? ` (keyword: ${keyword})` : ''}`);
+    hub.broadcast({ t: 'targets', targets: list });
+    res.json({ target: t });
+  });
+
+  api.delete('/targets/:id', (req, res) => {
+    const id = req.params.id;
+    const list = (config.get().targets || []).filter(t => t.id !== id);
+    config.update({ targets: list });
+    for (const r of store.all()) if (r.tr && r.tr[id]) delete r.tr[id];
+    store.scheduleSave();
+    hub.broadcast({ t: 'targets', targets: list });
+    res.json({ ok: true });
+  });
+
+  api.post('/targets/run', async (req, res) => {
+    const { id, mode, ids } = req.body || {};
+    if (targets.isRunning()) return res.status(409).json({ error: 'a target run is already in progress' });
+    let m = 'alive';
+    if (mode === 'all') m = 'all';
+    else if (mode === 'unchecked') m = 'unchecked';
+    else if (mode === 'ids') m = { ids: ids || [] };
+    const r = await targets.run(id, m);
+    res.json(r.error ? { error: r.error } : { ok: true, ...r });
+  });
+
+  api.post('/targets/stop', (req, res) => { targets.stop(); res.json({ ok: true }); });
+
   app.use('/api', api);
   app.use('/api', (err, req, res, next) => {
     console.error(err);
@@ -235,7 +288,7 @@ function createApp(opts = {}) {
     ws.on('error', () => hub.clients.delete(ws));
   });
 
-  return { app, server, store, judges, geo, checker, gateway, config, log, hub };
+  return { app, server, store, judges, geo, checker, gateway, targets, config, log, hub };
 }
 
 /** Compact wire format for a proxy record. */
@@ -247,6 +300,7 @@ function compact(r) {
     ex: r.exitIp, ge: r.geo ? [r.geo.country, r.geo.countryCode, r.geo.city, r.geo.isp, r.geo.lat, r.geo.lon, r.geo.local ? 1 : 0, r.geo.proxyHost ? 1 : 0, r.geo.hosting ? 1 : 0] : null,
     ck: r.checks, fk: r.fails, lc: r.lastChecked, ls: r.lastSeen, gu: r.gwUses,
     er: r.lastError, mk: r.markers && r.markers.length ? r.markers : null,
+    tr: r.tr && Object.keys(r.tr).length ? r.tr : null,
   };
 }
 

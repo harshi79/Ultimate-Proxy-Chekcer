@@ -1,18 +1,20 @@
-# ⚡ Ultimate Proxy Checker
+# YORI — Proxy Checker
 
-Not a normal proxy checker. Most checkers give you a dead-or-alive list and call it a day.
-This one is a **full proxy workstation**: deep inspection, anonymity forensics, a live
-world map, and — the part that makes it a tool you actually *use* — a **rotating proxy
-gateway** that turns your verified pool into a single local endpoint.
+**Not a normal proxy checker.** Yori is a full proxy workstation: deep protocol
+inspection, anonymity forensics, target-based testing (fire your pool at *your
+own* URLs), a live world map — and a **rotating gateway** that turns your
+verified pool into a single local endpoint. Wrapped in a glassmorphism ×
+brutalism dashboard that updates live.
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│  paste / drop / fetch lists → ENGINE → verified, scored, geo'd pool │
-│                                   │                                 │
-│              live dashboard ◄─────┤                                 │
-│                                   ▼                                 │
-│        curl / scraper / browser → :8899 → rotates healthy proxies   │
-└────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ paste / drop / fetch lists → ENGINE → verified, scored, geo'd pool    │
+│      CUSTOM TARGETS ────────► test pool against YOUR urls             │
+│                                  │                                    │
+│           live dashboard ◄───────┤                                    │
+│                                  ▼                                    │
+│       curl / scraper / browser → :8899 → rotates healthy proxies      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## What it checks (per proxy)
@@ -23,43 +25,61 @@ gateway** that turns your verified pool into a single local endpoint.
 | **Protocol** | real handshakes: `HTTP` (absolute-URI), `HTTPS` (CONNECT + TLS), `SOCKS5`, `SOCKS4` |
 | **Anonymity** | judge echoes: **elite** (no leaks) · **anonymous** (Via/Forwarded markers, IP hidden) · **transparent** (your IP leaks through) |
 | **Latency** | judge round-trip through the proxy, rolling average |
-| **Download speed** | streamed throughput probe (configurable payload/URL) |
+| **Download speed** | streamed throughput probe |
 | **Exit IP** | what the world sees, compared against your real IP |
-| **Geo / ISP / ASN** | batched lookups (ip-api), proxy-host & hosting flags |
+| **Geo / ISP** | batched lookups (ip-api), proxy-host & hosting flags |
 | **Auth** | `user:pass` for both HTTP proxies and SOCKS5 |
+
+## ⌾ Custom targets — test proxies against YOUR websites
+
+Add any URL (plus an optional keyword that must appear in the response body)
+and Yori fires every alive proxy at it through the proxy's verified protocol
+(SOCKS tunneled, CONNECT+TLS, or plain HTTP). Per proxy you get:
+
+- HTTP status code (a 403 from behind a proxy tells you a lot)
+- latency to *that site*, payload size, page title / error
+- keyword hit or miss
+- an aggregated `x/y PASS · avg ms` line per target, chips on every table row,
+  and the full response details in the row inspector
+
+This answers the only question that matters: *"does this proxy work for the
+site **I** actually need?"*
+
+## Any input format
+
+```
+1.2.3.4:8080                       socks5://5.6.7.8:1080
+http://user:pass@9.9.9.9:3128      1.1.1.1:8080:user:pass
+1.1.1.2 8080 socks5                1.1.1.3, 8080, socks4
+{"ip":"6.6.6.6","port":9090,"protocol":"socks5"}
+```
+
+Paste, drag & drop a file, or one-click pull from public sources
+(ProxyScrape, TheSpeedX, monosans, Proxifly, GeoNode).
 
 ## The rotating gateway
 
 Start it from the dashboard and point anything at `http://localhost:8899`:
 
 ```bash
-curl -x http://localhost:8899 https://api.ipify.org          # plain HTTP proxying
-curl -x http://localhost:8899 https://example.com            # CONNECT tunneling
+curl -x http://localhost:8899 https://api.ipify.org
 ```
 
-- **round-robin** · **random** · **sticky sessions** (send `X-Session: myid`, or use
-  proxy basic-auth username as the session key) · **best** (lowest latency first)
-- dead upstream mid-request? → automatic rotation to the next healthy proxy
-  (two-strike rule before a proxy is retired)
-- each response is tagged with `X-Rotated-Via: ip:port` so you know who served you
-- SOCKS upstreams are chained for CONNECT, HTTP upstreams for plain requests
-
-There's also a **Fetch via rotation** button on the dashboard that demonstrates
-rotation straight from the browser (shows the exit IP + upstream used per fetch).
+- **round-robin** · **random** · **sticky sessions** (`X-Session: myid` or
+  proxy-auth username) · **best** (lowest latency)
+- dead upstream mid-request → automatic rotation (two-strike retirement)
+- responses tagged `X-Rotated-Via: ip:port`
+- dashboard button **FETCH VIA ROTATION** demos it from the browser
 
 ## The dashboard
 
-Dark ops-room UI, everything live over WebSocket:
-
-- KPI strip: pool, alive/dead, in-flight + queue, avg latency, elite count, checks/min sparkline
-- sortable/filterable table (status, protocol, anonymity, country, free-text) with per-row recheck/copy/remove
-- **live geo map** (canvas, self-contained — no tile server) + top-countries ranking, click to filter
-- engine console streaming checker/gateway events
-- import: paste, drag & drop file, or one-click pull from public sources (ProxyScrape,
-  TheSpeedX, monosans, Proxifly, GeoNode)
-- export: `txt` (`proto://ip:port`), `json`, `csv` — honoring the filters you've set
-- settings: concurrency, timeouts, protocol sniffing toggles, judges, speed probe,
-  recheck schedules, gateway port/mode
+Glass panels over neon ambient, hard brutalist borders and shadows, live over
+WebSocket: KPI strip + checks/min sparkline, stats ticker, sortable/filterable
+table (status, protocol, anonymity, country, free-text), **click any row for
+the full inspection report**, canvas world map (self-contained), targets panel,
+gateway panel, engine console, exports (`txt`/`json`/`csv`, filter-aware), and
+full settings (concurrency, sniffing toggles, judges, speed probe, recheck
+schedules, gateway).
 
 ## Run it
 
@@ -68,56 +88,42 @@ npm install
 npm start            # dashboard on http://localhost:3000
 ```
 
-Then: **Import** → paste a list or pick public sources → **Start check**.
-Pool + config persist in `data/` and survive restarts.
+Pool + config persist in `data/`.
 
-### Demo mode (no internet needed)
-
-A self-contained lab ships with the repo — mock proxies with distinct
-personalities (transparent / anonymous / elite / CONNECT-capable / SOCKS5 /
-slow / flaky / dead) and a local judge:
+### Demo mode (zero internet needed)
 
 ```bash
-npm run demo         # dashboard :3000 + gateway :8899, pre-loaded lab pool
+npm run demo         # dashboard :3000 + gateway :8899, local lab pool + targets
 ```
+
+Ships with a local proxy lab: mock proxies with distinct personalities
+(transparent / anonymous / elite / CONNECT-capable / SOCKS5 / slow / flaky /
+dead) and a local judge — the entire pipeline runs for real, just loopback.
 
 ### Self test
 
 ```bash
-npm run selftest     # end-to-end: engine, classification, gateway rotation — 18 assertions
+npm run selftest     # 22 end-to-end assertions incl. target runs + gateway rotation
 ```
 
 ## REST API
 
 | Endpoint | What |
 |---|---|
-| `GET /api/state` | full snapshot (pool, stats, config, logs) |
-| `POST /api/import/text` | `{ text }` — any common list format |
-| `POST /api/sources/fetch` | `{ sources: [ids] }` |
-| `POST /api/check/start` | `{ mode: "all" \| "unchecked" \| "dead" \| "alive" \| ids }` |
-| `POST /api/check/stop` | pause the engine |
-| `GET /api/export?format=txt\|json\|csv&status=alive…` | filtered export |
+| `GET /api/state` | full snapshot |
+| `POST /api/import/text` | `{ text }` — any format |
+| `POST /api/check/start` | `{ mode: "all" \| "unchecked" \| "dead" \| "alive" }` |
+| `POST /api/targets` | `{ url, keyword? }` — add a custom target |
+| `POST /api/targets/run` | `{ id, mode: "alive" \| "all" }` — fire the pool at it |
+| `GET /api/export?format=txt\|json\|csv…` | filtered export |
 | `POST /api/gateway/start` / `stop` / `config` | control the rotator |
-| `GET /api/gateway/fetch?url=…` | fetch a URL through the rotation (JSON result) |
-| `WS /ws` | live tick stream (stats, updates, logs) |
-
-## How judging works
-
-A *judge* is an echo endpoint that reveals (a) the exit IP the world sees and
-(b) which proxy-injected headers arrived (`Via`, `X-Forwarded-For`, `Forwarded`,
-`Client-IP`, …). Built-in judges: ip-api, httpbin, azenv — health-tracked with
-automatic fallback, and fully replaceable in Settings. Your own public IP is
-measured at startup, so *transparent* leaks are detected by header content **and**
-by exit-IP equality. If a judge is header-less (e.g. ip-api only), anonymity is
-marked `anon*` — a softer "at least not transparent" verdict. Honest classification
-over confident guessing.
+| `WS /ws` | live tick stream |
 
 ## Notes
 
-- Only check proxies you're allowed to use; this tool is for managing your own
-  pools and evaluating lists.
-- Free public proxies are hostile territory: expect heavy churn — that's what the
-  recheck scheduler and two-strike gateway rule are for.
-- Node 18+ (built on Node 22). Zero native dependencies.
+- Only check proxies you're allowed to use.
+- Free public proxies churn hard — that's what recheck schedules and the
+  two-strike gateway rule are for.
+- Node 18+. Zero native dependencies.
 
 MIT © 2026
