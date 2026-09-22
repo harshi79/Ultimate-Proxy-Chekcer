@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultimate Proxy Checker</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>⚡</text></svg>">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ═══ topbar ═══ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4.09 12.69a.5.5 0 0 0 .38.82H11l-1.5 8.18a.3.3 0 0 0 .54.24L19.9 11.3a.5.5 0 0 0-.38-.83H13l1.54-8.2a.3.3 0 0 0-.54-.27z" fill="#22d3ee"/></svg>
+      </div>
+      <div>
+        <h1>ULTIMATE <span>PROXY CHECKER</span></h1>
+        <div class="sub">deep inspection · rotating gateway</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="rate-chip" id="rateChip" title="checks completed in the last 60s"><b>0</b> checks/min</div>
+    <div class="engine-pill" id="enginePill"><span class="dot"></span><span id="engineLbl">idle</span></div>
+    <button class="btn go" id="btnEngine">▶ Start check</button>
+    <button class="btn primary" id="btnImport">⤓ Import</button>
+    <button class="btn ghost" id="btnSettings" title="Settings">⚙</button>
+  </header>
+
+  <!-- ═══ KPIs ═══ -->
+  <section class="kpis">
+    <div class="panel kpi" id="kpiTotal"><div class="lbl">Pool</div><div class="val" id="vTotal">0</div><div class="trend" id="tTotal">—</div></div>
+    <div class="panel kpi alive" id="kpiAlive"><div class="lbl">Alive</div><div class="val" id="vAlive">0</div><div class="trend" id="tAlive">—</div></div>
+    <div class="panel kpi dead" id="kpiDead"><div class="lbl">Dead</div><div class="val" id="vDead">0</div><div class="trend" id="tDead">—</div></div>
+    <div class="panel kpi checking" id="kpiChecking"><div class="lbl">In flight</div><div class="val" id="vChecking">0</div><div class="trend" id="tChecking">queued 0</div></div>
+    <div class="panel kpi lat" id="kpiLat"><div class="lbl">Avg latency</div><div class="val" id="vLat">—</div><div class="trend" id="tLat">alive proxies</div></div>
+    <div class="panel kpi elite" id="kpiElite"><div class="lbl">Elite</div><div class="val" id="vElite">0</div><div class="trend" id="tElite">anonymity</div></div>
+    <div class="panel kpi" id="kpiGeo"><div class="lbl">Geo resolved</div><div class="val" id="vGeo">0</div><div class="spark-wrap"><canvas class="spark" id="spark"></canvas></div></div>
+  </section>
+
+  <!-- ═══ main grid ═══ -->
+  <main class="grid">
+
+    <!-- table panel -->
+    <section class="panel" id="tablePanel">
+      <div class="toolbar">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="q" placeholder="Search ip, port, country, ISP…  ( / )" spellcheck="false">
+        </div>
+        <select class="sel" id="fStatus">
+          <option value="all">Status: all</option>
+          <option value="alive">Alive</option>
+          <option value="dead">Dead</option>
+          <option value="checking">Checking</option>
+          <option value="unchecked">Unchecked</option>
+        </select>
+        <select class="sel" id="fProto">
+          <option value="all">Protocol: all</option>
+          <option value="http">HTTP</option>
+          <option value="https">HTTPS (CONNECT)</option>
+          <option value="socks5">SOCKS5</option>
+          <option value="socks4">SOCKS4</option>
+        </select>
+        <select class="sel" id="fAnon">
+          <option value="all">Anonymity: all</option>
+          <option value="elite">Elite</option>
+          <option value="anonymous">Anonymous</option>
+          <option value="transparent">Transparent</option>
+          <option value="unknown">Unknown</option>
+        </select>
+        <select class="sel" id="fCountry"><option value="all">Country: all</option></select>
+        <div class="export-menu">
+          <button class="btn sm" id="btnExport">⤴ Export ▾</button>
+          <div class="menu" id="exportMenu">
+            <button data-fmt="txt-alive">TXT · alive only (proto://ip:port)</button>
+            <button data-fmt="txt">TXT · current filter (ip:port)</button>
+            <button data-fmt="json">JSON · current filter (full data)</button>
+            <button data-fmt="csv">CSV · current filter (spreadsheet)</button>
+          </div>
+        </div>
+        <button class="btn sm ghost" id="btnRecheckDead" title="Re-run the checker on all dead proxies">↻ Dead</button>
+        <button class="btn sm ghost" id="btnClearDead" title="Remove all dead proxies from the pool">✕ Dead</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="st">Status</th>
+              <th data-sort="id">Address</th>
+              <th data-sort="pr">Protocols</th>
+              <th data-sort="an">Anonymity</th>
+              <th data-sort="la">Latency</th>
+              <th data-sort="sp">Speed</th>
+              <th data-sort="geo">Location</th>
+              <th>ISP</th>
+              <th data-sort="lc">Checked</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="empty-state" id="emptyState" style="display:none">
+          <div class="big">⚡</div>
+          <h3>No proxies in the pool</h3>
+          <div>Paste a list, drop a file, or pull from public sources.</div>
+          <div class="row">
+            <button class="btn primary" onclick="openImport()">⤓ Import proxies</button>
+          </div>
+        </div>
+      </div>
+      <div class="table-foot">
+        <span id="footInfo">0 proxies</span>
+        <span class="spacer" style="flex:1"></span>
+        <span id="footSel"></span>
+      </div>
+    </section>
+
+    <!-- side column -->
+    <aside class="side">
+
+      <!-- map -->
+      <section class="panel">
+        <div class="panel-h">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.7 2.6 4 5.7 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.7-4-9s1.3-6.4 4-9z"/></svg>
+          Live geo map
+          <span class="spacer"></span>
+          <span class="dim mono" id="mapCount" style="font-size:11px"></span>
+        </div>
+        <div class="map-box">
+          <canvas id="map" width="760" height="380"></canvas>
+          <div class="map-tip" id="mapTip"></div>
+          <div class="map-empty" id="mapEmpty">Locations appear as alive proxies resolve their exit IP geo</div>
+        </div>
+        <div class="countries" id="countryList"></div>
+      </section>
+
+      <!-- gateway -->
+      <section class="panel">
+        <div class="panel-h">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 7l3-3M4 7l3 3M20 17H4m16 0-3-3m3 3-3 3"/></svg>
+          Rotating gateway
+          <span class="spacer"></span>
+          <label class="switch" title="Start/stop the local rotating proxy">
+            <input type="checkbox" id="gwToggle"><span class="track"></span><span class="knob"></span>
+          </label>
+        </div>
+        <div class="gw-grid">
+          <div class="gw-stat"><div class="l">Served</div><div class="v" id="gwServed" style="color:var(--green)">0</div></div>
+          <div class="gw-stat"><div class="l">Rotated away</div><div class="v" id="gwFailed" style="color:var(--red)">0</div></div>
+          <div class="gw-stat"><div class="l">Live tunnels</div><div class="v" id="gwTunnels" style="color:var(--cyan)">0</div></div>
+          <div class="gw-stat"><div class="l">Transferred</div><div class="v" id="gwBytes" style="color:var(--violet)">0 B</div></div>
+        </div>
+        <div class="gw-body">
+          <div class="copyline">
+            <span>endpoint</span><code id="gwEndpoint">http://localhost:8899</code>
+            <button class="icon-btn" id="gwCopy" title="Copy">⧉</button>
+            <select class="sel" id="gwMode" style="margin-left:auto" title="Rotation mode">
+              <option value="round-robin">round-robin</option>
+              <option value="random">random</option>
+              <option value="sticky">sticky sessions</option>
+              <option value="best">lowest latency</option>
+            </select>
+          </div>
+          <div class="gw-row">
+            <input class="gw-url" id="gwTestUrl" placeholder="URL to fetch through the rotation…" spellcheck="false">
+            <button class="btn sm go" id="gwTest">Fetch via rotation</button>
+          </div>
+          <div class="gw-result" id="gwResult"></div>
+          <div class="exits gw-row" id="gwExits"></div>
+        </div>
+      </section>
+
+      <!-- console -->
+      <section class="panel">
+        <div class="panel-h">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 8 4 4-4 4m7 2h7"/></svg>
+          Engine console
+          <span class="spacer"></span>
+          <span class="dim" style="font-size:10.5px">live</span>
+        </div>
+        <div class="console" id="console"></div>
+      </section>
+
+    </aside>
+  </main>
+</div>
+
+<!-- ═══ import modal ═══ -->
+<div class="overlay" id="importOverlay">
+  <div class="modal">
+    <div class="modal-h">Import proxies <button class="x" data-close>✕</button></div>
+    <div class="modal-b">
+      <div class="tabs">
+        <button class="tab active" data-tab="paste">Paste list</button>
+        <button class="tab" data-tab="file">Upload file</button>
+        <button class="tab" data-tab="sources">Public sources</button>
+      </div>
+      <div class="tabbody" data-body="paste">
+        <textarea class="ta" id="pasteTa" placeholder="1.2.3.4:8080&#10;socks5://5.6.7.8:1080&#10;http://user:pass@9.9.9.9:3128&#10;1.1.1.1:8080:user:pass" spellcheck="false"></textarea>
+        <div class="hint">
+          Supported: <code>ip:port</code> · <code>proto://ip:port</code> · <code>ip:port:user:pass</code> · <code>ip:port:proto</code> · one per line, comments with <code>#</code>
+        </div>
+      </div>
+      <div class="tabbody" data-body="file" style="display:none">
+        <div class="file-drop" id="fileDrop">
+          <div style="font-size:26px;margin-bottom:8px">⤓</div>
+          <b>Drop a .txt / .csv list</b><br>or click to browse — parsed with the same rules as paste
+          <input type="file" id="fileInput" accept=".txt,.csv,.list,text/plain" style="display:none">
+        </div>
+      </div>
+      <div class="tabbody" data-body="sources" style="display:none">
+        <div class="src-list" id="srcList"></div>
+        <div class="hint">Public free-proxy lists. The checker validates everything — importing garbage is fine.</div>
+      </div>
+    </div>
+    <div class="modal-f">
+      <span class="cnt" id="importCnt"></span>
+      <span style="flex:1"></span>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" id="btnDoImport">Import to pool</button>
+      <button class="btn go" id="btnSrcFetch" style="display:none">Fetch selected sources</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ settings drawer ═══ -->
+<div class="overlay drawer" id="settingsOverlay">
+  <div class="modal">
+    <div class="modal-h">Settings <button class="x" data-close>✕</button></div>
+    <div class="modal-b">
+      <div class="set-section">Checker engine</div>
+      <div class="set-grid">
+        <div class="set-row"><label>Concurrency</label><input type="number" id="sConc" min="1" max="1000"></div>
+        <div class="set-row"><label>Timeout / check (ms)</label><input type="number" id="sTimeout" min="1000" max="60000" step="500"></div>
+        <div class="set-row"><label>Recheck alive (min, 0=off)</label><input type="number" id="sRecheckAlive" min="0" max="720"></div>
+        <div class="set-row"><label>Recheck dead (min, 0=off)</label><input type="number" id="sRecheckDead" min="0" max="720"></div>
+      </div>
+      <div class="set-section">Protocol sniffing</div>
+      <div class="toggles" id="sniffToggles">
+        <label class="tg"><input type="checkbox" data-sniff="socks5"> SOCKS5</label>
+        <label class="tg"><input type="checkbox" data-sniff="socks4"> SOCKS4</label>
+        <label class="tg"><input type="checkbox" data-sniff="http"> HTTP</label>
+        <label class="tg"><input type="checkbox" data-sniff="https"> HTTPS (CONNECT)</label>
+      </div>
+      <div class="set-row wide" style="margin-top:8px"><label>HTTPS probe target (CONNECT verification)</label><input id="sHttpsProbe" spellcheck="false"></div>
+      <div class="set-section">Speed probe</div>
+      <div class="set-grid">
+        <div class="set-row"><label>Enabled</label><label class="tg"><input type="checkbox" id="sSpeedOn"> measure download speed</label></div>
+        <div class="set-row"><label>Max bytes</label><input type="number" id="sSpeedBytes" min="16384" max="4194304" step="16384"></div>
+        <div class="set-row wide"><label>Speed URL</label><input id="sSpeedUrl" spellcheck="false"></div>
+      </div>
+      <div class="set-section">Judges (echo endpoints, one per line)</div>
+      <div class="set-row wide"><textarea class="ta" id="sJudges" style="min-height:70px" spellcheck="false"></textarea></div>
+      <div class="set-section">Gateway</div>
+      <div class="set-grid">
+        <div class="set-row"><label>Port</label><input type="number" id="sGwPort" min="1" max="65535"></div>
+        <div class="set-row"><label>Default mode</label>
+          <select id="sGwMode">
+            <option value="round-robin">round-robin</option>
+            <option value="random">random</option>
+            <option value="sticky">sticky sessions</option>
+            <option value="best">lowest latency</option>
+          </select>
+        </div>
+      </div>
+      <div class="danger-zone">
+        <span class="t">Danger zone</span>
+        <button class="btn sm danger" id="btnResetResults">Reset results</button>
+        <button class="btn sm danger" id="btnWipe">Wipe pool</button>
+      </div>
+    </div>
+    <div class="modal-f">
+      <span class="cnt" id="setSaved"></span>
+      <span style="flex:1"></span>
+      <button class="btn" data-close>Close</button>
+      <button class="btn primary" id="btnSaveSettings">Save settings</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "name": "ultimate-proxy-checker",
+  "version": "1.0.0",
+  "description": "Deep-inspection proxy checker with anonymity detection, geo mapping, and a rotating proxy gateway — live dashboard included",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node scripts/demo.js",
+    "lab": "node -e \"require('./test/lab').startLab().then(l => { console.log('judge:', l.judgeUrl); l.lines.forEach(x => console.log(x)); setInterval(() => {}, 1 << 30); })\"",
+    "selftest": "node test/selftest.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harshi79/Ultimate-Proxy-Chekcer.git"
+  },
+  "keywords": [
+    "proxy",
+    "checker",
+    "socks5",
+    "socks4",
+    "http-proxy",
+    "anonymity",
+    "gateway",
+    "rotator"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/harshi79/Ultimate-Proxy-Chekcer/issues"
+  },
+  "homepage": "https://github.com/harshi79/Ultimate-Proxy-Chekcer#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}
